@@ -1,0 +1,328 @@
+================================================================================
+                    SPECIFICATION MAP: mrf.py
+              Media Resource Function - Spec Reference Bridge
+================================================================================
+
+Source File: 5G_Emulator_API/core_network/mrf.py
+Generated:   2026-01-10
+Lines:       860
+Purpose:     Map each code section to governing 3GPP specifications
+Based On:    FreeSWITCH mod_conference and media handling
+
+================================================================================
+PRIMARY GOVERNING SPECIFICATIONS
+================================================================================
+
+3GPP TS 23.228 - IP Multimedia Subsystem (IMS) Architecture
+  Location: 90_Work-Telco/3GPP/Rel-19/23_series/23228-j50.docx
+  Scope: MRF functional description and architecture
+  Key Sections:
+    - Section 4.2.5: MRFC functional description
+    - Section 4.2.6: MRFP functional description
+    - Section 4.7: Media resource control
+
+3GPP TS 23.218 - IP Multimedia Service Control
+  Location: 90_Work-Telco/3GPP/Rel-19/23_series/ (if available)
+  Scope: Service control for conferencing
+  Key Sections:
+    - Section 6: Conferencing
+    - Section 7: Announcements
+
+3GPP TS 24.147 - Conferencing Using IMS
+  Location: 90_Work-Telco/3GPP/Rel-19/24_series/ (if available)
+  Scope: Conference control procedures
+
+RFC 4575 - Conference Event Package
+  Scope: SIP event package for conference state
+
+FREESWITCH SOURCE REFERENCE:
+  Module: freeswitch/src/mod/applications/mod_conference/
+  Key Files: conference.c, conference_api.c, conference_member.c
+
+
+================================================================================
+LINE-BY-LINE SPECIFICATION MAPPING
+================================================================================
+
+
+LINES 1-24: MODULE HEADER AND FASTAPI SETUP
+--------------------------------------------------------------------------------
+
+Lines 1-4: Module Documentation
+  Reference: FreeSWITCH mod_conference
+  3GPP Specs: TS 23.228, TS 23.218
+
+  Note: MRF splits into MRFC (control) and MRFP (processing) per TS 23.228.
+  This implementation combines both for simulation.
+
+
+LINES 26-158: DATA MODELS
+--------------------------------------------------------------------------------
+
+Lines 30-49: Enums (MediaType, ConferenceState, MemberState)
+  Spec: TS 24.147 - Conference states
+  FreeSWITCH: conference.h - CS_* conference states
+
+Lines 51-60: class MemberFlags(BaseModel)
+  Spec: TS 24.147 - Media participation control
+  FreeSWITCH: conference.h - MFLAG_* member flags
+
+  Flags per FreeSWITCH mod_conference:
+    - can_speak: MFLAG_CAN_SPEAK (audio transmission)
+    - can_hear: MFLAG_CAN_HEAR (audio reception)
+    - is_moderator: MFLAG_MODERATOR (conference control)
+    - end_conference_on_exit: MFLAG_ENDCONF (last moderator leaves)
+    - ghost: MFLAG_GHOST (hidden participant)
+
+Lines 62-79: class RtpEndpoint, MediaStream
+  Spec: RFC 3550 - RTP
+  Spec: RFC 4566 - SDP
+
+  RTP parameters:
+    - address/port: Media endpoint
+    - codec: Payload type
+    - ptime: Packetization time (20ms typical)
+    - ssrc: Synchronization Source
+
+Lines 81-118: class ConferenceMember, Conference
+  Spec: TS 24.147 - Conference model
+  FreeSWITCH: conference.h - conference_member_t, conference_obj_t
+
+  Conference settings:
+    - rate: Audio sample rate (8000, 16000, etc.)
+    - interval: Mixing interval (10, 20, 30ms)
+    - energy_threshold: Voice Activity Detection threshold
+
+Lines 120-147: class Announcement, PlaybackSession
+  Spec: TS 23.218 - Announcement services
+  FreeSWITCH: mod_playback functionality
+
+Lines 149-158: class TranscodingSession
+  Spec: Codec negotiation per SDP offer/answer
+  Used for endpoint codec mismatch resolution
+
+
+LINES 160-229: STORAGE AND CONFIGURATION
+--------------------------------------------------------------------------------
+
+Lines 164-207: class MrfStorage
+  Purpose: Resource management for MRF
+
+  Resources tracked:
+    - conferences: Active conference rooms
+    - announcements: Available prompts/tones
+    - playback_sessions: Active playback
+    - transcoding_sessions: Active transcoding
+    - rtp_port_pool: Available RTP ports
+
+Lines 173-193: _init_default_announcements()
+  Spec: TS 23.218 - Standard announcements
+
+  Standard IMS announcements:
+    - welcome: Conference greeting
+    - member_joined/left: Presence notification
+    - you_are_muted/unmuted: State notification
+
+Lines 214-229: class MrfConfig
+  Spec: TS 23.228 - MRF configuration
+
+  Settings:
+    - supported_codecs: G.711, G.729, AMR, AMR-WB
+    - rtp_port_range: Dynamic port allocation
+
+
+LINES 231-357: CONFERENCE CONTROL
+--------------------------------------------------------------------------------
+
+Lines 235-265: create_conference()
+  Spec: TS 24.147 Section 5.3.1 - Conference factory
+  FreeSWITCH: conference_new()
+
+  Creates conference room with:
+    - Unique identifier
+    - Access PIN (optional)
+    - Recording option
+    - Maximum members
+
+Lines 267-338: Conference management endpoints
+  Spec: TS 24.147 - Conference lifecycle
+
+  Endpoints:
+    - GET /conferences: List active conferences
+    - GET /conferences/{id}: Conference details with member list
+    - DELETE /conferences/{id}: Destroy conference
+
+Lines 316-338: destroy_conference()
+  Spec: TS 24.147 Section 5.3.3 - Terminate conference
+  FreeSWITCH: conference_destroy()
+
+  Actions:
+    - Release all RTP ports
+    - Disconnect all members
+    - Remove from storage
+
+Lines 340-356: lock_conference(), unlock_conference()
+  Spec: TS 24.147 - Conference access control
+
+
+LINES 358-576: CONFERENCE MEMBER CONTROL
+--------------------------------------------------------------------------------
+
+Lines 362-439: add_member()
+  Spec: TS 24.147 Section 5.3.2 - Join conference
+  FreeSWITCH: conference_add_member()
+
+  Procedure:
+    1. Verify conference state (not locked/terminated)
+    2. Check capacity
+    3. Verify PIN if required
+    4. Allocate RTP ports
+    5. Create member record
+    6. Play join announcement
+
+Lines 441-475: remove_member()
+  Spec: TS 24.147 Section 5.3.2.3 - Leave conference
+  FreeSWITCH: conference_del_member()
+
+  Actions:
+    - Release RTP ports
+    - Check end_conference_on_exit flag
+    - Play leave announcement
+
+Lines 477-542: Member state control
+  Spec: TS 24.147 - Media control
+  FreeSWITCH: conference_api.c commands
+
+  Operations:
+    - mute/unmute: Audio transmission control
+    - deaf/undeaf: Audio reception control
+
+Lines 544-576: mute_all(), unmute_all()
+  Spec: TS 24.147 - Moderator controls
+  FreeSWITCH: conference_mute_all()
+
+
+LINES 578-662: ANNOUNCEMENT/PROMPT PLAYBACK
+--------------------------------------------------------------------------------
+
+Lines 582-599: play_announcement_to_conference()
+  Spec: TS 23.218 - Announcement service
+  FreeSWITCH: conference_play_file()
+
+Lines 601-626: Announcement management
+  Spec: TS 23.218 - Custom announcements
+
+  Endpoints:
+    - POST /announcements: Create custom announcement
+    - GET /announcements: List available announcements
+
+Lines 628-662: Play to URI endpoints
+  Spec: TS 23.218 - Direct announcement to endpoint
+
+
+LINES 664-751: TRANSCODING
+--------------------------------------------------------------------------------
+
+Lines 668-719: create_transcoding_session()
+  Spec: RFC 3264 - SDP offer/answer
+  Purpose: Bridge incompatible codecs
+
+  Typical use cases:
+    - G.711 <-> AMR transcoding for VoLTE
+    - Wideband to narrowband conversion
+    - Video transcoding (future)
+
+Lines 721-751: Transcoding session management
+  Purpose: Lifecycle management for transcoding
+
+
+LINES 753-799: SDP MANIPULATION
+--------------------------------------------------------------------------------
+
+Lines 757-799: modify_sdp()
+  Spec: RFC 4566 - SDP
+  Spec: RFC 3264 - Offer/Answer
+
+  Operations:
+    - Codec filtering (prefer/remove)
+    - Address modification (topology hiding)
+    - Port modification (NAT traversal)
+
+
+LINES 801-860: STATISTICS, HEALTH, AND STARTUP
+--------------------------------------------------------------------------------
+
+Lines 805-818: get_statistics()
+  Purpose: MRF resource utilization
+
+Lines 824-841: root endpoint (/)
+  Returns MRF status with:
+    - Supported codecs
+    - Resource counts
+
+Lines 843-846: health endpoint (/health)
+  Standard health check
+
+Lines 852-859: Main entry point
+  Starts on port 9033
+
+
+================================================================================
+SPECIFICATION CROSS-REFERENCE TABLE
+================================================================================
+
+| Code Section            | Primary Spec      | Section        |
+|-------------------------|-------------------|----------------|
+| Conference              | TS 24.147         | 5.3            |
+| ConferenceMember        | TS 24.147         | 5.3.2          |
+| MemberFlags             | TS 24.147         | 6              |
+| MediaStream             | RFC 3550          | 5.1            |
+| Announcement            | TS 23.218         | 7              |
+| TranscodingSession      | RFC 3264          | -              |
+| create_conference       | TS 24.147         | 5.3.1          |
+| add_member              | TS 24.147         | 5.3.2          |
+| modify_sdp              | RFC 4566          | 5              |
+
+
+================================================================================
+FREESWITCH SOURCE MAPPING
+================================================================================
+
+| Python Class/Function     | FreeSWITCH File           | Function       |
+|---------------------------|---------------------------|----------------|
+| Conference                | conference.h              | conference_obj_t |
+| ConferenceMember          | conference.h              | conference_member_t |
+| MemberFlags               | conference.h              | MFLAG_* defines  |
+| create_conference         | conference.c              | conference_new() |
+| destroy_conference        | conference.c              | conference_destroy() |
+| add_member                | conference_member.c       | conference_add_member() |
+| remove_member             | conference_member.c       | conference_del_member() |
+| mute_member               | conference_api.c          | conf_api_sub_mute() |
+| play_announcement         | conference_file.c         | conference_play_file() |
+
+
+================================================================================
+MRF ARCHITECTURE NOTE
+================================================================================
+
+Per 3GPP TS 23.228, the MRF is split into:
+
+MRFC (Media Resource Function Controller)
+  - SIP/SDP handling
+  - Conference state machine
+  - Announcement triggering
+  - Implemented in: Conference control endpoints
+
+MRFP (Media Resource Function Processor)
+  - RTP handling
+  - Audio mixing
+  - Transcoding
+  - Implemented in: Transcoding, RTP port management
+
+This emulator combines both functions in a single service for simplicity.
+In production deployments, these would typically be separate components
+communicating via H.248/MEGACO or proprietary control protocols.
+
+================================================================================
+                              END OF DOCUMENT
+================================================================================

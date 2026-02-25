@@ -1,0 +1,132 @@
+================================================================================
+                    SPECIFICATION MAP: location_api.py
+            MEC Location API - ETSI Spec Reference Bridge
+================================================================================
+
+Source File: 5G_Emulator_API/etsi/mec/location_api.py
+Generated:   2026-01-10
+Lines:       ~450
+Purpose:     Map code to ETSI GS MEC 013 Location API specification
+
+
+================================================================================
+PRIMARY GOVERNING SPECIFICATIONS
+================================================================================
+
+ETSI GS MEC 013 - Location API
+  Location: 90_Work-Telco/ETSI/MEC/gs_MEC013v030101p.pdf
+  OpenAPI: 90_Work-Telco/ETSI/forge/gs013-location-api/
+  Scope: UE location information for MEC applications
+  Key Sections:
+    - Section 6: Data model
+    - Section 7: API definition
+
+
+================================================================================
+INTEGRATION WITH 5G CORE
+================================================================================
+
+Location Service integrates with AMF to retrieve UE location:
+
+  +------------------+                    +------------------+
+  |   MEC App        |----Location API--->|  Location        |
+  |                  |                    |  Service         |
+  +------------------+                    +--------+---------+
+                                                   |
+                                                   | Namf-comm
+                                                   v
+                                          +------------------+
+                                          |   AMF (amf.py)   |
+                                          |   UE Context     |
+                                          +------------------+
+
+Data Flow:
+  1. MEC App queries /location/v2/users/{userId}
+  2. Location Service queries AMF for UE context
+  3. AMF returns cell ID and estimated location
+  4. Location Service returns formatted response
+
+
+================================================================================
+LINE-BY-LINE SPECIFICATION MAPPING
+================================================================================
+
+LINES 27-35: LocationType and Shape Enums
+  Spec: ETSI GS MEC 013 - Section 6.2.2, 6.2.3
+
+LINES 37-45: class Coordinates(BaseModel)
+  Spec: ETSI GS MEC 013 - Section 6.2.5 Point
+  Fields: latitude (-90 to 90), longitude (-180 to 180), altitude
+
+LINES 47-60: class LocationInfo(BaseModel)
+  Spec: ETSI GS MEC 013 - Section 6.2.2 LocationInfo
+  Fields: lat, lon, altitude, accuracy, shape, timestamp
+
+LINES 62-80: class CivicAddress(BaseModel)
+  Spec: ETSI GS MEC 013 - Section 6.2.4 CivicAddress
+  Use: Human-readable address (street, city, country)
+
+LINES 82-100: class TerminalLocation(BaseModel)
+  Spec: ETSI GS MEC 013 - Section 6.2.6 TerminalLocation
+  Core response object for user location queries
+
+LINES 102-115: class AccessPointInfo(BaseModel)
+  Spec: ETSI GS MEC 013 - Section 6.4.2 AccessPointInfo
+  Represents a cell site (gNodeB/eNB)
+
+LINES 117-125: class ZoneInfo(BaseModel)
+  Spec: ETSI GS MEC 013 - Section 6.3.2 ZoneInfo
+  Geographic zone containing multiple access points
+
+LINES 127-150: Subscription Models
+  Spec: ETSI GS MEC 013 - Section 6.5.2, 6.5.3
+  UserTrackingSubscription, ZonalTrafficSubscription
+
+
+================================================================================
+API ENDPOINTS MAPPING
+================================================================================
+
+GET /location/v2/queries/users
+  Spec: Section 7.3.2 - Query multiple user locations
+  Query: address[] (MSISDN or acr:)
+
+GET /location/v2/users/{userId}
+  Spec: Section 7.4.2 - Get specific user location
+
+GET /location/v2/zones
+  Spec: Section 7.5.2 - List all zones
+
+GET /location/v2/zones/{zoneId}
+  Spec: Section 7.5.3 - Get zone info
+
+GET /location/v2/zones/{zoneId}/accessPoints
+  Spec: Section 7.6.2 - List access points in zone
+
+GET /location/v2/zones/{zoneId}/accessPoints/{accessPointId}
+  Spec: Section 7.6.3 - Get access point info
+
+POST /location/v2/subscriptions/userTracking
+  Spec: Section 7.7.2 - Subscribe to user location updates
+
+POST /location/v2/subscriptions/zonalTraffic
+  Spec: Section 7.8.2 - Subscribe to zone traffic
+
+
+================================================================================
+SPECIFICATION FILE LOCATIONS
+================================================================================
+
+Primary ETSI Spec:
+  90_Work-Telco/ETSI/MEC/gs_MEC013v030101p.pdf
+
+OpenAPI Definition:
+  90_Work-Telco/ETSI/forge/gs013-location-api/LocationAPI.yaml
+
+Related 5G Core:
+  5G_Emulator_API/core_network/amf.py (UE context source)
+
+
+================================================================================
+                         END OF SPECIFICATION MAP
+================================================================================

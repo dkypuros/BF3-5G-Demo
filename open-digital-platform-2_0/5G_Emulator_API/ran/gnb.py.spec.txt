@@ -1,0 +1,762 @@
+================================================================================
+SPECIFICATION MAP: gnb.py
+gNodeB (5G Base Station) - NGAP Protocol Implementation
+================================================================================
+
+File: 5G_Emulator_API/ran/gnb.py
+Lines: 803
+Primary Role: Radio Access Network node, UE connectivity, N2 interface to AMF
+Interface: N2 (to AMF via NGAP), Uu (to UE via NR air interface - simulated)
+
+================================================================================
+PRIMARY GOVERNING SPECIFICATIONS
+================================================================================
+
+1. 3GPP TS 38.413 - NG-RAN; NG Application Protocol (NGAP)
+   Your file: 90_Work-Telco/3GPP/Rel-19/38_series/38413-j20.zip
+   Coverage: All NGAP procedures, messages, IEs between gNB and AMF
+
+2. 3GPP TS 38.300 - NR and NG-RAN Overall Description
+   Your file: 90_Work-Telco/3GPP/Rel-19/38_series/38300-j30.zip
+   Coverage: gNB functional architecture, NG interface principles
+
+3. 3GPP TS 38.401 - NG-RAN Architecture Description
+   Your file: 90_Work-Telco/3GPP/Rel-19/38_series/38401-j20.zip
+   Coverage: NG-RAN architecture, gNB deployment options
+
+4. 3GPP TS 23.501 - System Architecture for 5G
+   Your file: 90_Work-Telco/3GPP/Rel-19/23_series/23501-j40.zip
+   Coverage: Reference points, N2 interface definition
+
+5. 3GPP TS 23.003 - Numbering, Addressing and Identification
+   Your file: 90_Work-Telco/3GPP/Rel-19/23_series/23003-j30.zip
+   Coverage: NR Cell Identity, TAC, PLMN Identity formats
+
+================================================================================
+LINE-BY-LINE SPECIFICATION MAPPING
+================================================================================
+
+--------------------------------------------------------------------------------
+LINES 1-4: Header Comments
+--------------------------------------------------------------------------------
+Claims: TS 38.413 - gNodeB NGAP Implementation, 100% Compliant
+Primary specification: 3GPP TS 38.413
+
+Reference point per TS 23.501 Section 4.2.4:
+  N2: Reference point between (R)AN and AMF
+  "The N2 reference point is used for control plane signalling"
+
+--------------------------------------------------------------------------------
+LINES 29-34: Criticality Enum
+--------------------------------------------------------------------------------
+Specification: 3GPP TS 38.413 Section 9.4.4 - Criticality
+
+  ASN.1 Definition from TS 38.413:
+    Criticality ::= ENUMERATED { reject, ignore, notify }
+
+  Semantics per Section 10.6:
+  - reject: Receiving node shall report error if IE not understood
+  - ignore: Receiving node shall ignore IE if not understood
+  - notify: Receiving node shall ignore and notify sender
+
+Compliance: EXACT MATCH with TS 38.413 Criticality enumeration
+
+--------------------------------------------------------------------------------
+LINES 35-66: ProcedureCode Enum
+--------------------------------------------------------------------------------
+Specification: 3GPP TS 38.413 Section 9.4.3 - Procedure Code
+
+  Defined in NGAP-PDU-Descriptions (TS 38.413 Annex A):
+  +-------+----------------------------------------+
+  | Value | Procedure                              |
+  +-------+----------------------------------------+
+  |   0   | id-HandoverPreparation                 |
+  |   1   | id-HandoverResourceAllocation          |
+  |   2   | (reserved/other)                       |
+  |   3   | id-HandoverCancel                      |
+  |   4   | id-DownlinkNASTransport                |
+  |   5   | id-ErrorIndication                     |
+  |   6   | id-OverloadStop                        |
+  |   7   | id-PWSCancel                           |
+  |   8   | id-PWSRestartIndication                |
+  |   9   | id-PWSFailureIndication                |
+  |  10   | id-LocationReportingControl            |
+  |  11   | id-LocationReport                      |
+  |  14   | id-InitialContextSetup                 |
+  |  15   | id-InitialUEMessage                    |
+  |  16   | id-UEContextModification               |
+  |  18   | id-NASNonDeliveryIndication            |
+  |  19   | id-OverloadStart                       |
+  |  20   | id-Paging                              |
+  |  21   | id-NGSetup                             |
+  |  22   | id-NGReset                             |
+  |  29   | id-PDUSessionResourceSetup             |
+  |  30   | id-PDUSessionResourceModify            |
+  |  31   | id-PDUSessionResourceRelease           |
+  |  41   | id-UEContextRelease                    |
+  |  42   | id-UEContextReleaseRequest             |
+  |  46   | id-UplinkNASTransport                  |
+  |  47   | id-UERadioCapabilityCheckRequest       |
+  |  48   | id-UERadioCapabilityInfoIndication     |
+  |  49   | id-WriteReplaceWarning                 |
+  +-------+----------------------------------------+
+
+Compliance: Values align with TS 38.413 NGAP-PDU-Descriptions
+
+--------------------------------------------------------------------------------
+LINES 68-71: PlmnIdentity Model
+--------------------------------------------------------------------------------
+Specification: 3GPP TS 23.003 Section 2.2 - PLMN Identification
+
+  Format:
+    MCC: Mobile Country Code (3 digits)
+    MNC: Mobile Network Code (2-3 digits)
+
+  ASN.1 from TS 38.413 Section 9.3.3.1:
+    PLMNIdentity ::= OCTET STRING (SIZE(3))
+    -- Encoded as per TS 23.003
+
+Example: MCC="001", MNC="01" = Test PLMN
+
+--------------------------------------------------------------------------------
+LINES 72-75: NrCgi Model (NR Cell Global Identifier)
+--------------------------------------------------------------------------------
+Specification: 3GPP TS 38.413 Section 9.3.1.7 - NR CGI
+
+  ASN.1 Definition:
+    NR-CGI ::= SEQUENCE {
+        pLMNIdentity          PLMNIdentity,
+        nRCellIdentity        NRCellIdentity,
+        ...
+    }
+
+    NRCellIdentity ::= BIT STRING (SIZE(36))
+
+The 36-bit NR Cell Identity per TS 38.413 Section 9.3.1.8:
+  - Bits 0-21: gNB Identifier (22-32 bits configurable)
+  - Bits 22-35: Cell Identity within gNB (4-14 bits)
+
+Reference: TS 38.300 Section 9.2.1.5 - NR Cell Global Identifier structure
+
+--------------------------------------------------------------------------------
+LINES 76-79: Tai Model (Tracking Area Identity)
+--------------------------------------------------------------------------------
+Specification: 3GPP TS 38.413 Section 9.3.3.2 - TAI
+
+  ASN.1 Definition:
+    TAI ::= SEQUENCE {
+        pLMNIdentity    PLMNIdentity,
+        tAC             TAC,
+        ...
+    }
+
+    TAC ::= OCTET STRING (SIZE(3))
+
+TAC (Tracking Area Code) per TS 23.003 Section 19.4.2.3:
+  - 24-bit value
+  - Hexadecimal representation (6 hex digits)
+
+--------------------------------------------------------------------------------
+LINES 80-95: GlobalGnbId, SupportedTaItem, ServedGuamiItem, PlmnSupportItem
+--------------------------------------------------------------------------------
+GlobalGnbId - Specification: TS 38.413 Section 9.3.1.6 - Global RAN Node ID
+  ASN.1:
+    GlobalRANNodeID ::= CHOICE {
+        globalGNB-ID      GlobalGNB-ID,
+        globalNgENB-ID    GlobalNgENB-ID,
+        globalN3IWF-ID    GlobalN3IWF-ID,
+        ...
+    }
+
+    GlobalGNB-ID ::= SEQUENCE {
+        pLMNIdentity    PLMNIdentity,
+        gNB-ID          GNB-ID,
+        ...
+    }
+
+SupportedTaItem - Specification: TS 38.413 Section 9.3.3.4 - Supported TA Item
+  Used in NG Setup Request to declare served tracking areas
+
+ServedGuamiItem - Specification: TS 38.413 Section 9.3.1.38 - Served GUAMI Item
+  GUAMI = Globally Unique AMF Identifier (used in AMF identification)
+
+PlmnSupportItem - Specification: TS 38.413 Section 9.3.1.37 - PLMN Support Item
+  Lists slice support per PLMN (S-NSSAI list)
+
+--------------------------------------------------------------------------------
+LINES 96-99: UserLocationInformation Model
+--------------------------------------------------------------------------------
+Specification: 3GPP TS 38.413 Section 9.3.1.101 - User Location Information
+
+  ASN.1 Definition:
+    UserLocationInformation ::= CHOICE {
+        userLocationInformationEUTRA    UserLocationInformationEUTRA,
+        userLocationInformationNR       UserLocationInformationNR,
+        userLocationInformationN3IWF    UserLocationInformationN3IWF,
+        ...
+    }
+
+  UserLocationInformationNR includes:
+    - NR-CGI (NR Cell Global Identity)
+    - TAI (Tracking Area Identity)
+    - TimeStamp (optional)
+
+Used in: Initial UE Message, Uplink NAS Transport, Handover procedures
+
+--------------------------------------------------------------------------------
+LINES 101-109: NgapMessage and NgapPdu Models
+--------------------------------------------------------------------------------
+Specification: 3GPP TS 38.413 Section 9.4 - PDU Definitions
+
+  NGAP-PDU structure (ASN.1):
+    NGAP-PDU ::= CHOICE {
+        initiatingMessage     InitiatingMessage,
+        successfulOutcome     SuccessfulOutcome,
+        unsuccessfulOutcome   UnsuccessfulOutcome,
+        ...
+    }
+
+    InitiatingMessage ::= SEQUENCE {
+        procedureCode   NGAP-ELEMENTARY-PROCEDURE.&procedureCode,
+        criticality     NGAP-ELEMENTARY-PROCEDURE.&criticality,
+        value           NGAP-ELEMENTARY-PROCEDURE.&InitiatingMessage
+    }
+
+This is the fundamental message structure for all NGAP communication.
+
+--------------------------------------------------------------------------------
+LINES 111-118: UeContext Model
+--------------------------------------------------------------------------------
+Context management per TS 38.413 and TS 38.401:
+
+  - ranUeNgapId: RAN UE NGAP ID (TS 38.413 Section 9.3.3.3)
+    "Unique within NG-RAN node for the UE association"
+    32-bit integer assigned by gNB
+
+  - amfUeNgapId: AMF UE NGAP ID (TS 38.413 Section 9.3.3.4)
+    "Unique within AMF for the UE association"
+    40-bit integer assigned by AMF
+
+  - ueState: RRC state per TS 38.300 Section 7.2
+    - IDLE: RRC_IDLE (no RRC context at gNB)
+    - CONNECTED: RRC_CONNECTED (active RRC context)
+    - INACTIVE: RRC_INACTIVE (suspended RRC context) [not implemented]
+
+  - pduSessions: Per TS 23.501 Section 5.6 - PDU Session management
+
+--------------------------------------------------------------------------------
+LINES 120-124: CellContext Model
+--------------------------------------------------------------------------------
+Cell management per TS 38.300 and TS 38.401:
+
+  - nrCgi: NR Cell Global Identity (unique cell identifier)
+  - cellState: Cell operational state
+  - connectedUes: UEs attached to this cell
+  - load: Cell load percentage for load balancing
+
+Reference: TS 38.300 Section 5.4.2 - Cell configuration
+
+--------------------------------------------------------------------------------
+LINES 132-166: GNodeB Class Initialization
+--------------------------------------------------------------------------------
+gNB Configuration per TS 38.413 Section 9.2.6.1 (NG Setup Request IEs):
+
+  - global_gnb_id (line 135-138): Mandatory IE
+    Identifies the gNB globally
+
+  - ran_node_name (line 139): Optional IE
+    Human-readable name for the gNB
+
+  - supported_tas (lines 140-145): Mandatory IE
+    List of Tracking Areas served by this gNB
+
+  - default_paging_drx (line 146): Mandatory IE
+    Default paging DRX cycle
+    Values per TS 38.413: v32, v64, v128, v256
+
+Cell Identity format (line 157):
+  NR Cell Identity is 36 bits:
+  Example: "0" * 28 + "00000001" = 36 bits total
+
+--------------------------------------------------------------------------------
+LINES 168-184: create_ngap_message Method
+--------------------------------------------------------------------------------
+Creates NGAP PDU structure per TS 38.413 Section 9.4
+
+Message types:
+  - initiatingMessage: New procedure initiation
+  - successfulOutcome: Positive response to initiating message
+  - unsuccessfulOutcome: Negative response with cause
+
+All NGAP messages use this structure.
+
+--------------------------------------------------------------------------------
+LINES 186-205: create_ng_setup_request Method
+--------------------------------------------------------------------------------
+Specification: 3GPP TS 38.413 Section 9.2.6.1 - NG SETUP REQUEST
+
+  Purpose: Establish NGAP connection between gNB and AMF
+
+  Mandatory IEs:
+  +---------------------------+----------------------------+
+  | IE                        | TS 38.413 Reference        |
+  +---------------------------+----------------------------+
+  | Global RAN Node ID        | Section 9.3.1.6            |
+  | Supported TA List         | Section 9.3.3.4            |
+  | Default Paging DRX        | Section 9.3.1.17           |
+  +---------------------------+----------------------------+
+
+  Optional IEs:
+  - RAN Node Name (Section 9.3.1.10)
+  - UE Retention Information (Section 9.3.1.126)
+
+Procedure per Section 8.7.1:
+  1. gNB sends NG Setup Request to AMF
+  2. AMF validates and responds:
+     - NG Setup Response (success) OR
+     - NG Setup Failure (failure with cause)
+
+--------------------------------------------------------------------------------
+LINES 207-234: create_initial_ue_message Method
+--------------------------------------------------------------------------------
+Specification: 3GPP TS 38.413 Section 9.2.5.1 - INITIAL UE MESSAGE
+
+  Purpose: First message from gNB to AMF for a new UE connection
+
+  Mandatory IEs:
+  +---------------------------+----------------------------+
+  | IE                        | TS 38.413 Reference        |
+  +---------------------------+----------------------------+
+  | RAN UE NGAP ID            | Section 9.3.3.3            |
+  | NAS-PDU                   | Section 9.3.1.21           |
+  | User Location Information | Section 9.3.1.101          |
+  | RRC Establishment Cause   | Section 9.3.1.18           |
+  +---------------------------+----------------------------+
+
+  Optional IEs:
+  - UE Context Request (Section 9.3.1.119)
+    "requested" = gNB requests AMF to setup UE context
+
+RRC Establishment Cause values (Table 9.3.1.18-1):
+  - emergency
+  - highPriorityAccess
+  - mt-Access
+  - mo-Signalling
+  - mo-Data
+  - mo-VoiceCall
+  - mo-VideoCall
+  - mo-SMS
+  - mps-PriorityAccess
+  - mcs-PriorityAccess
+
+Procedure flow per TS 23.502 Section 4.2.2.2 (Registration):
+  1. UE sends RRC Connection Request to gNB
+  2. gNB allocates RAN UE NGAP ID
+  3. gNB sends Initial UE Message to AMF
+  4. AMF processes registration, responds via Downlink NAS Transport
+
+--------------------------------------------------------------------------------
+LINES 236-259: create_uplink_nas_transport Method
+--------------------------------------------------------------------------------
+Specification: 3GPP TS 38.413 Section 9.2.5.4 - UPLINK NAS TRANSPORT
+
+  Purpose: Carry NAS messages from UE to AMF (via gNB)
+
+  Mandatory IEs:
+  +---------------------------+----------------------------+
+  | IE                        | TS 38.413 Reference        |
+  +---------------------------+----------------------------+
+  | AMF UE NGAP ID            | Section 9.3.3.4            |
+  | RAN UE NGAP ID            | Section 9.3.3.3            |
+  | NAS-PDU                   | Section 9.3.1.21           |
+  | User Location Information | Section 9.3.1.101          |
+  +---------------------------+----------------------------+
+
+NAS-PDU contents: Opaque to gNB (NAS layer is AMF-UE)
+Reference: TS 24.501 - NAS protocol for 5GS
+
+--------------------------------------------------------------------------------
+LINES 261-286: handle_downlink_nas_transport Method
+--------------------------------------------------------------------------------
+Specification: 3GPP TS 38.413 Section 9.2.5.3 - DOWNLINK NAS TRANSPORT
+
+  Purpose: Carry NAS messages from AMF to UE (via gNB)
+
+  Mandatory IEs:
+  +---------------------------+----------------------------+
+  | IE                        | TS 38.413 Reference        |
+  +---------------------------+----------------------------+
+  | AMF UE NGAP ID            | Section 9.3.3.4            |
+  | RAN UE NGAP ID            | Section 9.3.3.3            |
+  | NAS-PDU                   | Section 9.3.1.21           |
+  +---------------------------+----------------------------+
+
+Processing:
+  1. Receive NGAP message from AMF
+  2. Extract UE identifier (RAN UE NGAP ID)
+  3. Find UE context
+  4. Forward NAS-PDU to UE via RRC (simulated)
+
+--------------------------------------------------------------------------------
+LINES 288-330: handle_ue_context_setup_request Method
+--------------------------------------------------------------------------------
+Specification: 3GPP TS 38.413 Section 9.2.2.1 - INITIAL CONTEXT SETUP REQUEST
+
+  Purpose: Establish UE context at gNB including security
+
+  Mandatory IEs:
+  +---------------------------+----------------------------+
+  | IE                        | TS 38.413 Reference        |
+  +---------------------------+----------------------------+
+  | AMF UE NGAP ID            | Section 9.3.3.4            |
+  | RAN UE NGAP ID            | Section 9.3.3.3            |
+  | Security Key              | Section 9.3.1.87           |
+  | UE Security Capabilities  | Section 9.3.1.86           |
+  +---------------------------+----------------------------+
+
+Security Key per TS 33.501:
+  - KgNB derived from KAMF
+  - Used for AS security (RRC and UP protection)
+
+UE Security Capabilities per TS 33.501 Section 5.3:
+  - Encryption algorithms: NEA0, NEA1, NEA2, NEA3
+  - Integrity algorithms: NIA0, NIA1, NIA2, NIA3
+
+Response per Section 9.2.2.2 (INITIAL CONTEXT SETUP RESPONSE):
+  - AMF UE NGAP ID
+  - RAN UE NGAP ID
+
+Failure per Section 9.2.2.3 (INITIAL CONTEXT SETUP FAILURE):
+  - Cause IE with failure reason
+
+--------------------------------------------------------------------------------
+LINES 332-347: _create_ue_context_setup_failure Method
+--------------------------------------------------------------------------------
+Specification: 3GPP TS 38.413 Section 9.2.2.3 - INITIAL CONTEXT SETUP FAILURE
+
+Cause values per Section 9.3.1.2 (Cause):
+  Radio Network causes:
+  - unknown-local-UE-NGAP-ID
+  - handover-target-not-allowed
+  - unspecified
+  - etc.
+
+  Transport causes, NAS causes, Protocol causes, etc.
+
+--------------------------------------------------------------------------------
+LINES 349-399: handle_pdu_session_resource_setup_request Method
+--------------------------------------------------------------------------------
+Specification: 3GPP TS 38.413 Section 9.2.1.1 - PDU SESSION RESOURCE SETUP REQUEST
+
+  Purpose: Setup radio resources for PDU sessions at gNB
+
+  Mandatory IEs:
+  +---------------------------+----------------------------+
+  | IE                        | TS 38.413 Reference        |
+  +---------------------------+----------------------------+
+  | AMF UE NGAP ID            | Section 9.3.3.4            |
+  | RAN UE NGAP ID            | Section 9.3.3.3            |
+  | PDU Session Resource      | Section 9.3.4.1            |
+  | Setup List                |                            |
+  +---------------------------+----------------------------+
+
+PDU Session Resource Setup List contains:
+  - PDU Session ID
+  - S-NSSAI (slice info)
+  - PDU Session Resource Setup Request Transfer
+    (contains QoS, UP transport layer info, etc.)
+
+Processing per Section 8.2.1:
+  1. For each PDU session in list:
+     a. Allocate DRB (Data Radio Bearer)
+     b. Configure QoS flows
+     c. Setup GTP-U tunnel to UPF
+  2. Respond with setup results
+
+Response per Section 9.2.1.2 (PDU SESSION RESOURCE SETUP RESPONSE):
+  - PDUSessionResourceSetupListSURes (successful)
+  - PDUSessionResourceFailedToSetupListSURes (failed)
+
+Cross-reference: TS 38.300 Section 6.1.3.1 - DRB configuration
+
+--------------------------------------------------------------------------------
+LINES 401-422: _create_pdu_session_resource_setup_response Method
+--------------------------------------------------------------------------------
+Specification: 3GPP TS 38.413 Section 9.2.1.2 - PDU SESSION RESOURCE SETUP RESPONSE
+
+Response structure:
+  - Success list: PDU sessions successfully setup
+  - Failed list: PDU sessions that failed with causes
+
+--------------------------------------------------------------------------------
+LINES 424-470: handle_handover_request Method
+--------------------------------------------------------------------------------
+Specification: 3GPP TS 38.413 Section 9.2.3.1 - HANDOVER REQUEST
+
+  Purpose: Request target gNB to prepare for incoming handover
+
+  This is the TARGET gNB receiving a handover request from AMF.
+
+  Mandatory IEs:
+  +---------------------------+----------------------------+
+  | IE                        | TS 38.413 Reference        |
+  +---------------------------+----------------------------+
+  | AMF UE NGAP ID            | Section 9.3.3.4            |
+  | Handover Type             | Section 9.3.1.25           |
+  | Cause                     | Section 9.3.1.2            |
+  | Source to Target          | Section 9.3.1.31           |
+  | Transparent Container     |                            |
+  +---------------------------+----------------------------+
+
+Handover Type per Section 9.3.1.25:
+  - intra5gs (within 5G system)
+  - fivegs-to-eps (5G to LTE)
+  - eps-to-5gs (LTE to 5G)
+
+Processing per Section 8.4.2:
+  1. Allocate resources at target cell
+  2. Create UE context
+  3. Generate Target to Source Transparent Container
+  4. Respond with Handover Request Acknowledge
+
+Response per Section 9.2.3.2 (HANDOVER REQUEST ACKNOWLEDGE):
+  - Target to Source Transparent Container
+  - PDU Session Resource Admitted List
+
+Failure per Section 9.2.3.3 (HANDOVER PREPARATION FAILURE):
+  - Cause (e.g., handover-target-not-allowed)
+
+Reference: TS 23.502 Section 4.9 - Mobility procedures
+
+--------------------------------------------------------------------------------
+LINES 474-508: Lifespan and NG Setup
+--------------------------------------------------------------------------------
+Startup sequence per 3GPP specifications:
+
+1. Register with NRF (TS 29.510)
+   Note: gNB registration with NRF is not strictly per 3GPP
+   (NRF is for core NFs), but enables service discovery
+
+2. Discover AMF (TS 29.510 - Nnrf_NFDiscovery)
+
+3. Send NG Setup Request (TS 38.413 Section 8.7.1)
+   Establishes SCTP association in production
+   This simulation uses HTTP
+
+SCTP Association per TS 38.412:
+  Production uses SCTP (Stream Control Transmission Protocol)
+  Reference: RFC 4960 - Stream Control Transmission Protocol
+
+--------------------------------------------------------------------------------
+LINES 510-530: send_ng_setup_request Function
+--------------------------------------------------------------------------------
+NG Setup Procedure per TS 38.413 Section 8.7.1:
+
+  1. gNB initiates TCP/SCTP connection to AMF
+  2. gNB sends NG SETUP REQUEST
+  3. AMF validates:
+     - PLMN identity
+     - Supported TAs
+  4. AMF responds:
+     - NG SETUP RESPONSE (success) with AMF info
+     - NG SETUP FAILURE (reject) with cause
+
+Upon success, amf_connection_established = True
+
+--------------------------------------------------------------------------------
+LINES 541-589: Initial UE Message Endpoint
+--------------------------------------------------------------------------------
+Route: POST /ngap/initial-ue-message
+Specification: TS 38.413 Section 9.2.5.1
+
+OpenTelemetry span attributes:
+  - 3gpp.procedure: "initial_ue_message"
+  - 3gpp.interface: "N2" (Reference point per TS 23.501)
+  - 3gpp.protocol: "NGAP"
+
+Processing:
+  1. Generate RAN UE NGAP ID (unique per gNB)
+  2. Create UE context
+  3. Build Initial UE Message with NAS-PDU
+  4. Send to AMF
+
+--------------------------------------------------------------------------------
+LINES 591-610: Downlink NAS Transport Endpoint
+--------------------------------------------------------------------------------
+Route: POST /ngap/downlink-nas-transport
+Specification: TS 38.413 Section 9.2.5.3
+
+This endpoint receives messages FROM the AMF (downlink direction).
+
+--------------------------------------------------------------------------------
+LINES 612-628: UE Context Setup Request Endpoint
+--------------------------------------------------------------------------------
+Route: POST /ngap/ue-context-setup-request
+Specification: TS 38.413 Section 9.2.2.1
+
+Receives Initial Context Setup Request from AMF.
+Responds with success or failure.
+
+--------------------------------------------------------------------------------
+LINES 630-646: PDU Session Resource Setup Request Endpoint
+--------------------------------------------------------------------------------
+Route: POST /ngap/pdu-session-resource-setup-request
+Specification: TS 38.413 Section 9.2.1.1
+
+Handles PDU session setup requests from AMF.
+
+--------------------------------------------------------------------------------
+LINES 648-664: Handover Request Endpoint
+--------------------------------------------------------------------------------
+Route: POST /ngap/handover-request
+Specification: TS 38.413 Section 9.2.3.1
+
+Target gNB endpoint for handover preparation.
+
+--------------------------------------------------------------------------------
+LINES 666-705: Uplink NAS Transport Endpoint
+--------------------------------------------------------------------------------
+Route: POST /ngap/uplink-nas-transport
+Specification: TS 38.413 Section 9.2.5.4
+
+Sends NAS messages from UE (via gNB) to AMF.
+
+--------------------------------------------------------------------------------
+LINES 713-756: Status and Context Endpoints
+--------------------------------------------------------------------------------
+GET /gnb_status: Overall gNB operational status
+GET /gnb/ue-contexts: All UE contexts managed by gNB
+GET /gnb/cell-contexts: All served cells
+
+These expose internal state for observability.
+
+--------------------------------------------------------------------------------
+LINES 758-772: AMF Heartbeat Task
+--------------------------------------------------------------------------------
+Background keep-alive mechanism.
+
+Note: Not strictly per NGAP spec. SCTP handles liveness in production.
+This HTTP heartbeat simulates connection monitoring.
+
+--------------------------------------------------------------------------------
+LINES 775-800: Health and Metrics Endpoints
+--------------------------------------------------------------------------------
+GET /health: Service health check
+GET /metrics: Operational metrics
+
+Metrics align with TS 28.552 (Performance measurements):
+  - total_ues: Connected UE count
+  - connected_ues: RRC_CONNECTED UEs
+  - idle_ues: RRC_IDLE UEs
+  - total_pdu_sessions: Active PDU sessions
+  - served_cells: Cell count
+
+================================================================================
+NGAP PROCEDURE COVERAGE
+================================================================================
+
+| Procedure                        | TS 38.413 Section | Status      |
+|----------------------------------|-------------------|-------------|
+| NG Setup                         | 8.7.1, 9.2.6.1    | IMPLEMENTED |
+| Initial UE Message               | 8.6.1, 9.2.5.1    | IMPLEMENTED |
+| Downlink NAS Transport           | 8.6.2, 9.2.5.3    | IMPLEMENTED |
+| Uplink NAS Transport             | 8.6.3, 9.2.5.4    | IMPLEMENTED |
+| Initial Context Setup            | 8.3.1, 9.2.2.1    | IMPLEMENTED |
+| PDU Session Resource Setup       | 8.2.1, 9.2.1.1    | IMPLEMENTED |
+| Handover Request                 | 8.4.2, 9.2.3.1    | IMPLEMENTED |
+| UE Context Release               | 8.3.3, 9.2.2.5    | NOT IMPL    |
+| PDU Session Resource Modify      | 8.2.2, 9.2.1.3    | NOT IMPL    |
+| PDU Session Resource Release     | 8.2.3, 9.2.1.5    | NOT IMPL    |
+| Paging                           | 8.5.1, 9.2.4.1    | NOT IMPL    |
+| Error Indication                 | 8.8.1, 9.2.7.1    | NOT IMPL    |
+
+================================================================================
+OPENTELEMETRY SPAN ATTRIBUTES
+================================================================================
+
+| Attribute         | Value/Type         | Source                    |
+|-------------------|--------------------|---------------------------|
+| 3gpp.procedure    | NGAP procedure name| TS 38.413 procedure names |
+| 3gpp.interface    | "N2"               | TS 23.501 Section 4.2.4   |
+| 3gpp.protocol     | "NGAP"             | TS 38.413                 |
+| status            | SUCCESS/FAIL       | Implementation            |
+| error             | Error message      | Implementation            |
+
+================================================================================
+KEY DATA STRUCTURE COMPLIANCE
+================================================================================
+
+RAN UE NGAP ID (Section 9.3.3.3):
+  - 32-bit unsigned integer
+  - Unique within gNB for UE association
+  - Assigned by gNB
+  - Code: Lines 161-166 (generate_ran_ue_ngap_id)
+
+AMF UE NGAP ID (Section 9.3.3.4):
+  - 40-bit unsigned integer
+  - Unique within AMF for UE association
+  - Assigned by AMF
+
+NR CGI (Section 9.3.1.7):
+  - PLMN Identity (3 octets)
+  - NR Cell Identity (36 bits)
+  - Code: Lines 72-74, 155-158
+
+TAI (Section 9.3.3.2):
+  - PLMN Identity (3 octets)
+  - TAC (3 octets)
+  - Code: Lines 76-78
+
+================================================================================
+GAPS VS FULL PRODUCTION COMPLIANCE
+================================================================================
+
+1. Transport Layer
+   Current: HTTP/JSON
+   Production: SCTP per TS 38.412
+   Reference: RFC 4960 (SCTP), TS 38.412 (N2 user plane)
+
+2. ASN.1 Encoding
+   Current: JSON representation
+   Production: APER (Aligned Packed Encoding Rules)
+   Reference: ITU-T X.691
+
+3. Missing Procedures
+   - UE Context Release
+   - Paging
+   - Reset
+   - Overload handling
+   - Error Indication
+
+4. RRC Layer
+   Current: Not implemented (UE connection simulated)
+   Production: Full RRC per TS 38.331
+
+5. Security
+   Current: Security context stored but not enforced
+   Production: Full AS security per TS 33.501
+
+================================================================================
+RELATED SPECIFICATION FILES IN YOUR LIBRARY
+================================================================================
+
+Primary:
+  90_Work-Telco/3GPP/Rel-19/38_series/38413-j20.zip (NGAP)
+  90_Work-Telco/3GPP/Rel-19/38_series/38300-j30.zip (NR Overview)
+  90_Work-Telco/3GPP/Rel-19/38_series/38401-j20.zip (NG-RAN Architecture)
+  90_Work-Telco/3GPP/Rel-19/23_series/23501-j40.zip (5G Architecture)
+  90_Work-Telco/3GPP/Rel-19/23_series/23003-j30.zip (Identifiers)
+
+Supporting:
+  90_Work-Telco/3GPP/Rel-19/38_series/38331-j40.zip (RRC)
+  90_Work-Telco/3GPP/Rel-19/38_series/38412-j10.zip (N2 Transport)
+  90_Work-Telco/3GPP/Rel-19/33_series/33501-j40.zip (5G Security)
+  90_Work-Telco/3GPP/Rel-19/24_series/24501-j40.zip (NAS for 5GS)
+  90_Work-Telco/3GPP/Rel-19/23_series/23502-j40.zip (5G Procedures)
+
+IETF:
+  RFC 4960 - Stream Control Transmission Protocol (SCTP)
+
+================================================================================
+END OF SPECIFICATION MAP
+================================================================================

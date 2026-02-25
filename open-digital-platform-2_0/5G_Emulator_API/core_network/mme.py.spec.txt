@@ -1,0 +1,331 @@
+================================================================================
+                    SPECIFICATION MAP: mme.py
+           Mobility Management Entity - Spec Reference Bridge
+================================================================================
+
+Source File: 5G_Emulator_API/core_network/mme.py
+Generated:   2026-01-10
+Lines:       831
+Purpose:     Map each code section to governing 3GPP specifications
+Based On:    Open5GS MME implementation
+
+================================================================================
+PRIMARY GOVERNING SPECIFICATIONS
+================================================================================
+
+3GPP TS 23.401 - GPRS Enhancements for E-UTRAN Access
+  Location: 90_Work-Telco/3GPP/Rel-19/23_series/
+  Scope: EPC system architecture
+  Key Sections:
+    - Section 5.3: EMM and ECM procedures
+    - Section 5.4: EPS bearer management
+
+3GPP TS 24.301 - NAS Protocol for EPS
+  Location: 90_Work-Telco/3GPP/Rel-19/24_series/
+  Scope: EMM and ESM protocols
+  Key Sections:
+    - Section 5.5: EMM procedures (attach, detach, TAU)
+    - Section 6.5: ESM procedures (PDN connectivity)
+
+3GPP TS 36.413 - S1AP Protocol
+  Location: 90_Work-Telco/3GPP/Rel-19/36_series/
+  Scope: eNB-MME interface
+  Key Sections:
+    - Section 8: S1AP procedures
+    - Section 9: S1AP message definitions
+
+3GPP TS 33.401 - EPS Security Architecture
+  Location: 90_Work-Telco/3GPP/Rel-19/33_series/
+  Scope: Key derivation, NAS security
+
+
+================================================================================
+LINE-BY-LINE SPECIFICATION MAPPING
+================================================================================
+
+
+LINES 1-37: MODULE HEADER AND IMPORTS
+--------------------------------------------------------------------------------
+
+Lines 1-5: Module Documentation
+  Reference: Open5GS MME
+  3GPP Specs: TS 23.401
+
+Lines 7-31: Imports and OpenTelemetry setup
+
+
+LINES 39-188: DATA MODELS
+--------------------------------------------------------------------------------
+
+Lines 43-51: class EmmState(Enum)
+  Spec: TS 24.301 Section 5.1.3.2 - EMM states in UE
+
+  States per TS 24.301:
+    - EMM-DEREGISTERED: Not attached
+    - EMM-REGISTERED-INITIATED: Attach in progress
+    - EMM-REGISTERED: Successfully attached
+    - EMM-DEREGISTERED-INITIATED: Detach in progress
+    - EMM-SERVICE-REQUEST-INITIATED: Service request pending
+    - EMM-TAU-INITIATED: TAU in progress
+
+Lines 52-59: class EsmState(Enum)
+  Spec: TS 24.301 Section 6.1.3.3 - ESM bearer states
+
+  States:
+    - BEARER-INACTIVE: No active bearer
+    - BEARER-ACTIVE-PENDING: Activation in progress
+    - BEARER-ACTIVE: Bearer established
+    - BEARER-INACTIVE-PENDING: Deactivation pending
+
+Lines 60-65: class AttachType(Enum)
+  Spec: TS 24.301 Section 9.9.3.11 - EPS attach type
+
+Lines 66-82: TAI, ECGI, GUTI
+  Spec: TS 24.301 - EPS identifiers
+
+  GUTI structure per TS 24.301 Section 9.9.3.12:
+    - PLMN ID
+    - MME Group ID
+    - MME Code
+    - M-TMSI
+
+Lines 83-91: class SecurityContext
+  Spec: TS 33.401 Section 7 - NAS security
+
+  Security parameters:
+    - KSI: Key Set Identifier
+    - KASME: Key for ASME
+    - K_NAS_enc/K_NAS_int: NAS keys
+    - UL/DL COUNT: Replay counters
+
+Lines 92-104: class EpsBearer
+  Spec: TS 24.301 Section 6.1.3 - EPS bearer context
+
+  Bearer parameters per TS 23.401:
+    - EBI: EPS Bearer ID (5-15)
+    - QCI: QoS Class Identifier
+    - ARP: Allocation and Retention Priority
+    - GBR/MBR: Bit rates
+
+Lines 105-113: class PdnConnection
+  Spec: TS 24.301 Section 6.5 - PDN connection
+
+Lines 114-121: class EnbUeContext
+  Spec: TS 36.413 - S1AP UE context
+
+  Contains:
+    - eNB UE S1AP ID
+    - MME UE S1AP ID
+    - TAI and ECGI
+
+Lines 122-136: class MmeUeContext
+  Spec: TS 23.401 Section 5.7.1 - MME UE context
+
+  Full UE state at MME
+
+Lines 138-188: Request/Response Models
+  Spec: TS 24.301 - NAS message structures
+
+
+LINES 189-287: MME CONTEXT MANAGER
+--------------------------------------------------------------------------------
+
+Lines 193-231: class MmeContext.__init__
+  Spec: TS 23.401 Section 4.3.3 - MME functions
+
+  MME configuration:
+    - MME ID, Group ID, Code
+    - Served TAI list per TS 23.401
+    - UE context storage
+
+Lines 233-270: UE context management methods
+  - allocate_m_tmsi(): M-TMSI allocation
+  - allocate_mme_ue_s1ap_id(): S1AP ID allocation
+  - allocate_guti(): GUTI allocation per TS 24.301
+  - add_ue() / find_ue_*() / remove_ue(): Context operations
+
+
+LINES 289-311: SECURITY FUNCTIONS
+--------------------------------------------------------------------------------
+
+Lines 293-298: derive_kasme()
+  Spec: TS 33.401 Annex A.2 - KASME derivation
+
+  KASME = KDF(CK||IK, PLMN_ID||SQN^AK)
+
+Lines 299-305: derive_nas_keys()
+  Spec: TS 33.401 Annex A.7 - NAS key derivation
+
+  K_NAS_enc = KDF(KASME, 0x15, alg_type=1)
+  K_NAS_int = KDF(KASME, 0x15, alg_type=2)
+
+Lines 307-311: derive_kenb()
+  Spec: TS 33.401 Annex A.3 - KeNB derivation
+
+  KeNB = KDF(KASME, UL_COUNT)
+
+
+LINES 313-338: HEALTH AND CONFIGURATION ENDPOINTS
+--------------------------------------------------------------------------------
+
+Lines 316-326: health_check()
+  Returns MME status
+
+Lines 327-338: get_configuration()
+  Returns MME configuration
+
+
+LINES 339-383: S1AP INTERFACE
+--------------------------------------------------------------------------------
+
+Lines 343-383: s1ap_enb_setup()
+  Spec: TS 36.413 Section 8.7 - S1 Setup
+
+  Procedure per TS 36.413:
+    1. Validate TAI support
+    2. Register eNB connection
+    3. Return served GUMMEI list
+
+  Response includes:
+    - MME name
+    - Served GUMMEI list
+    - Relative MME capacity
+
+
+LINES 384-524: EMM PROCEDURES
+--------------------------------------------------------------------------------
+
+Lines 388-493: emm_attach_request()
+  Spec: TS 24.301 Section 5.5.1 - Attach procedure
+  Spec: TS 23.401 Section 5.3.2 - Attach procedure
+
+  Procedure per TS 24.301:
+    1. Find/create UE context
+    2. Request identity if GUTI-only
+    3. Authentication (simplified - would use HSS)
+    4. Security activation
+    5. Allocate GUTI
+    6. Create default bearer
+    7. Return Attach Accept
+
+Lines 494-524: emm_detach_request()
+  Spec: TS 24.301 Section 5.5.2 - Detach procedure
+
+  Types per TS 24.301:
+    - UE_ORIGINATED: UE initiated
+    - SWITCH_OFF: Power off
+
+Lines 526-568: emm_service_request()
+  Spec: TS 24.301 Section 5.6.1 - Service Request
+
+  Procedure:
+    1. Find UE by M-TMSI
+    2. Verify KSI
+    3. Update eNB context
+
+Lines 570-610: emm_tau_request()
+  Spec: TS 24.301 Section 5.5.3 - Tracking Area Update
+
+  Update types:
+    - TA_UPDATING: Normal TAU
+    - COMBINED_TA_LA_UPDATING: Combined TA/LA update
+
+
+LINES 612-694: ESM PROCEDURES
+--------------------------------------------------------------------------------
+
+Lines 616-661: esm_pdn_connectivity_request()
+  Spec: TS 24.301 Section 6.5.1 - PDN Connectivity
+
+  Creates PDN connection with default bearer
+
+Lines 663-694: esm_pdn_disconnect_request()
+  Spec: TS 24.301 Section 6.5.2 - PDN Disconnect
+
+  Cannot disconnect last PDN while attached
+
+
+LINES 696-760: S1 HANDOVER
+--------------------------------------------------------------------------------
+
+Lines 700-733: s1ap_handover_required()
+  Spec: TS 36.413 Section 8.4 - Handover
+
+  Intra-MME handover procedure:
+    1. Verify UE context
+    2. Verify target eNB
+    3. Prepare handover context
+
+Lines 735-760: s1ap_handover_notify()
+  Spec: TS 36.413 Section 8.4.3 - Handover Notify
+
+  Updates UE location after handover
+
+
+LINES 762-814: UE CONTEXT MANAGEMENT
+--------------------------------------------------------------------------------
+
+Lines 766-802: list_ue_contexts() / get_ue_context()
+  Administrative UE context queries
+
+Lines 803-814: get_statistics()
+  Returns procedure counts
+
+
+================================================================================
+SPECIFICATION CROSS-REFERENCE TABLE
+================================================================================
+
+| Code Section            | Primary Spec | Section        |
+|-------------------------|--------------|----------------|
+| EmmState                | TS 24.301    | 5.1.3.2        |
+| EsmState                | TS 24.301    | 6.1.3.3        |
+| AttachType              | TS 24.301    | 9.9.3.11       |
+| GUTI                    | TS 24.301    | 9.9.3.12       |
+| SecurityContext         | TS 33.401    | 7              |
+| EpsBearer               | TS 24.301    | 6.1.3          |
+| derive_kasme            | TS 33.401    | Annex A.2      |
+| derive_nas_keys         | TS 33.401    | Annex A.7      |
+| derive_kenb             | TS 33.401    | Annex A.3      |
+| s1ap_enb_setup          | TS 36.413    | 8.7            |
+| emm_attach_request      | TS 24.301    | 5.5.1          |
+| emm_detach_request      | TS 24.301    | 5.5.2          |
+| emm_service_request     | TS 24.301    | 5.6.1          |
+| emm_tau_request         | TS 24.301    | 5.5.3          |
+| esm_pdn_connectivity    | TS 24.301    | 6.5.1          |
+| s1ap_handover           | TS 36.413    | 8.4            |
+
+
+================================================================================
+QCI TABLE REFERENCE (TS 23.203)
+================================================================================
+
+| QCI | Resource Type | Priority | Delay   | Error Rate | Example Service    |
+|-----|---------------|----------|---------|------------|-------------------|
+| 1   | GBR           | 2        | 100ms   | 10^-2      | Voice (VoLTE)     |
+| 2   | GBR           | 4        | 150ms   | 10^-3      | Video calling     |
+| 3   | GBR           | 3        | 50ms    | 10^-3      | Gaming            |
+| 4   | GBR           | 5        | 300ms   | 10^-6      | Video streaming   |
+| 5   | Non-GBR       | 1        | 100ms   | 10^-6      | IMS signalling    |
+| 6   | Non-GBR       | 6        | 300ms   | 10^-6      | Video/TCP         |
+| 7   | Non-GBR       | 7        | 100ms   | 10^-3      | Voice/Video/Gaming|
+| 8   | Non-GBR       | 8        | 300ms   | 10^-6      | Web browsing      |
+| 9   | Non-GBR       | 9        | 300ms   | 10^-6      | Default bearer    |
+
+
+================================================================================
+MME INTERFACE MAPPING
+================================================================================
+
+| Interface | Connected NF | Protocol | Purpose                    |
+|-----------|--------------|----------|----------------------------|
+| S1-MME    | eNB          | S1AP     | Control plane              |
+| S6a       | HSS          | Diameter | Authentication/Subscription|
+| S11       | SGW          | GTPv2-C  | Session management         |
+| S10       | MME          | GTPv2-C  | Inter-MME handover         |
+| S3        | SGSN         | GTPv2-C  | 2G/3G interworking         |
+
+
+================================================================================
+                              END OF DOCUMENT
+================================================================================

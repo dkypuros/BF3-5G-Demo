@@ -1,0 +1,779 @@
+# File location: 5G_Emulator_API/main.py
+# File location: 5G_Emulator_API/main.py
+import subprocess
+import logging
+import os
+import psutil
+import time
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Get the directory of the current script
+current_dir = os.path.dirname(os.path.abspath(__file__))
+
+def kill_process_on_port(port):
+    for conn in psutil.net_connections():
+        if conn.laddr.port == port:
+            try:
+                process = psutil.Process(conn.pid)
+                process.terminate()
+                logger.info(f"Terminated process on port {port}")
+                return True
+            except psutil.NoSuchProcess:
+                pass
+    return False
+
+def start_nf(file_path, port):
+    full_path = os.path.join(current_dir, file_path)
+    if kill_process_on_port(port):
+        time.sleep(1)  # Wait for the port to be released
+    try:
+        process = subprocess.Popen(["python", full_path])
+        logger.info(f"Started {file_path} on port {port}")
+        return process
+    except Exception as e:
+        logger.error(f"Failed to start {file_path}: {str(e)}")
+        return None
+
+if __name__ == "__main__":
+    processes = []
+
+    # Start NRF
+    processes.append(start_nf("core_network/nrf.py", 8000))
+
+    # Start Network Functions
+    processes.append(start_nf("core_network/amf.py", 9000))
+    processes.append(start_nf("core_network/smf.py", 9001))
+    processes.append(start_nf("core_network/upf.py", 9002))
+    processes.append(start_nf("core_network/ausf.py", 9003))
+    processes.append(start_nf("core_network/udm.py", 9004))
+    processes.append(start_nf("core_network/udr.py", 9005))
+    processes.append(start_nf("core_network/udsf.py", 9006))
+    
+    # Start CU and DU
+    processes.append(start_nf("ran/cu/cu.py", 9008))
+    processes.append(start_nf("ran/du/du.py", 9007))
+
+    # Start RRU
+    processes.append(start_nf("ran/rru/rru.py", 9009))
+
+    # Start PTP
+    processes.append(start_nf("ptp/ptp.py", 9010))
+
+    logger.info("All components started")
+
+    # Wait for all processes to finish
+    for process in processes:
+        if process:
+            process.wait()
+
+    logger.info("All components have finished")
+
+# File location: 5G_Emulator_API/test_cu_du.py
+# File location: 5G_Emulator_API/test_cu_du.py
+# File location: 5G_Emulator_API/test_cu_du.py
+import requests
+
+cu_url = "http://127.0.0.1:9008"
+du_url = "http://127.0.0.1:9007"
+
+# Simulate CU sending data to DU
+def cu_to_du():
+    data = {"message": "Data from CU to DU"}
+    response = requests.post(f"{cu_url}/cu_to_du", json=data)
+    print(response.json())
+
+# Simulate DU sending data to CU
+def du_to_cu():
+    data = {"message": "Data from DU to CU"}
+    response = requests.post(f"{du_url}/du_service", json=data)
+    print(response.json())
+
+if __name__ == "__main__":
+    cu_to_du()
+    du_to_cu()
+
+
+# File location: 5G_Emulator_API/test_5g_network.py
+# File location: 5G_Emulator_API/test_5g_network.py
+import requests
+import time
+
+def test_5g_network():
+    gnb_url = "http://127.0.0.1:38412"
+    amf_url = "http://127.0.0.1:9000"
+
+    # Step 1: Check gNodeB status
+    response = requests.get(f"{gnb_url}/gnb_status")
+    print("gNodeB Status:", response.json())
+
+    # Step 2: Simulate Initial UE Message
+    ue_data = {
+        "imsi": "123456789012345",
+        "initial_message": "RRC Connection Request"
+    }
+    response = requests.post(f"{gnb_url}/initial_ue_message", json=ue_data)
+    print("Initial UE Message Response:", response.json())
+
+    # Step 3: Registration Request
+    registration_data = {
+        "imsi": "123456789012345",
+        "registration_type": "initial_registration"
+    }
+    response = requests.post(f"{amf_url}/registration_request", json=registration_data)
+    print("Registration Request Response:", response.json())
+
+    # Step 4: Authentication Response (simulating successful authentication)
+    auth_data = {
+        "imsi": "123456789012345",
+        "auth_result": "success"
+    }
+    response = requests.post(f"{amf_url}/authentication_response", json=auth_data)
+    print("Authentication Response:", response.json())
+
+    # Step 5: Security Mode Complete
+    security_data = {
+        "imsi": "123456789012345",
+        "security_capabilities": "5G-EA1, 5G-IA1"
+    }
+    response = requests.post(f"{amf_url}/security_mode_complete", json=security_data)
+    print("Security Mode Complete Response:", response.json())
+
+    # Step 6: PDU Session Establishment Request
+    session_data = {
+        "imsi": "123456789012345",
+        "pdu_session_type": "IPv4",
+        "sst": 1,
+        "sd": "010203"
+    }
+    response = requests.post(f"{amf_url}/pdu_session_establishment_request", json=session_data)
+    print("PDU Session Establishment Response:", response.json())
+
+if __name__ == "__main__":
+    test_5g_network()
+
+# File location: 5G_Emulator_API/core_network/amf.py
+# File location: 5G_Emulator_API/core_network/amf.py
+from fastapi import FastAPI
+import uvicorn
+import requests
+from contextlib import asynccontextmanager
+
+nrf_url = "http://127.0.0.1:8000"
+smf_url = None
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    global smf_url
+    nf_registration = {
+        "nf_type": "AMF",
+        "ip": "127.0.0.1",
+        "port": 9000
+    }
+    try:
+        response = requests.post(f"{nrf_url}/register", json=nf_registration)
+        response.raise_for_status()
+        
+        # Discover SMF
+        smf_info = requests.get(f"{nrf_url}/discover/SMF").json()
+        if 'message' in smf_info:
+            print(f"SMF discovery failed: {smf_info['message']}")
+        else:
+            smf_url = f"http://{smf_info.get('ip')}:{smf_info.get('port')}"
+            print(f"SMF discovered at {smf_url}")
+    except requests.RequestException as e:
+        print(f"Failed to register with NRF or discover SMF: {str(e)}")
+    
+    yield
+    # Shutdown
+    # Add any cleanup code here if needed
+
+app = FastAPI(lifespan=lifespan)
+
+@app.get("/amf_service")
+def amf_service():
+    return {"message": "AMF service response"}
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="127.0.0.1", port=9000)
+
+# File location: 5G_Emulator_API/core_network/smf.py
+# File location: 5G_Emulator_API/core_network/smf.py
+from fastapi import FastAPI
+import uvicorn
+import requests
+from contextlib import asynccontextmanager
+
+nrf_url = "http://127.0.0.1:8000"
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    nf_registration = {
+        "nf_type": "SMF",
+        "ip": "127.0.0.1",
+        "port": 9001
+    }
+    try:
+        response = requests.post(f"{nrf_url}/register", json=nf_registration)
+        response.raise_for_status()
+        print("SMF registered with NRF")
+    except requests.RequestException as e:
+        print(f"Failed to register SMF with NRF: {str(e)}")
+    
+    yield
+    # Shutdown
+    # Add any cleanup code here if needed
+
+app = FastAPI(lifespan=lifespan)
+
+@app.get("/smf_service")
+def smf_service():
+    return {"message": "SMF service response"}
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="127.0.0.1", port=9001)
+
+# File location: 5G_Emulator_API/core_network/upf.py
+# File location: 5G_Emulator_API/core_network/upf.py
+from fastapi import FastAPI
+import uvicorn
+import requests
+from contextlib import asynccontextmanager
+
+nrf_url = "http://127.0.0.1:8000"
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    nf_registration = {
+        "nf_type": "UPF",
+        "ip": "127.0.0.1",
+        "port": 9002
+    }
+    try:
+        response = requests.post(f"{nrf_url}/register", json=nf_registration)
+        response.raise_for_status()
+        print("UPF registered with NRF")
+    except requests.RequestException as e:
+        print(f"Failed to register UPF with NRF: {str(e)}")
+    
+    yield
+    # Shutdown
+    # Add any cleanup code here if needed
+
+app = FastAPI(lifespan=lifespan)
+
+@app.get("/upf_service")
+def upf_service():
+    return {"message": "UPF service response"}
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="127.0.0.1", port=9002)
+
+# File location: 5G_Emulator_API/core_network/udm.py
+# File location: 5G_Emulator_API/core_network/udm.py
+from fastapi import FastAPI
+import uvicorn
+import requests
+from contextlib import asynccontextmanager
+
+nrf_url = "http://127.0.0.1:8000"
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    nf_registration = {
+        "nf_type": "UDM",
+        "ip": "127.0.0.1",
+        "port": 9004
+    }
+    try:
+        response = requests.post(f"{nrf_url}/register", json=nf_registration)
+        response.raise_for_status()
+        print("UDM registered with NRF")
+    except requests.RequestException as e:
+        print(f"Failed to register UDM with NRF: {str(e)}")
+    
+    yield
+    # Shutdown
+    # Add any cleanup code here if needed
+
+app = FastAPI(lifespan=lifespan)
+
+@app.get("/udm_service")
+def udm_service():
+    return {"message": "UDM service response"}
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="127.0.0.1", port=9004)
+
+# File location: 5G_Emulator_API/core_network/nrf.py
+# File location: 5G_Emulator_API/core_network/nrf.py
+# File location: 5G_Emulator_API/core_network/nrf.py
+from fastapi import FastAPI
+from pydantic import BaseModel
+import uvicorn
+
+app = FastAPI()
+
+class NFRegistration(BaseModel):
+    nf_type: str
+    ip: str
+    port: int
+
+nfs = {}
+
+@app.post("/register")
+def register_nf(nf: NFRegistration):
+    nfs[nf.nf_type] = {"ip": nf.ip, "port": nf.port}
+    return {"message": f"{nf.nf_type} registered successfully"}
+
+@app.get("/discover/{nf_type}")
+def discover_nf(nf_type: str):
+    if nf_type in nfs:
+        return nfs[nf_type]
+    else:
+        return {"message": f"{nf_type} not found"}
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="127.0.0.1", port=8000)
+
+
+# File location: 5G_Emulator_API/core_network/ausf.py
+# File location: 5G_Emulator_API/core_network/ausf.py
+from fastapi import FastAPI
+import uvicorn
+import requests
+from contextlib import asynccontextmanager
+
+nrf_url = "http://127.0.0.1:8000"
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    nf_registration = {
+        "nf_type": "AUSF",
+        "ip": "127.0.0.1",
+        "port": 9003
+    }
+    try:
+        response = requests.post(f"{nrf_url}/register", json=nf_registration)
+        response.raise_for_status()
+        print("AUSF registered with NRF")
+    except requests.RequestException as e:
+        print(f"Failed to register AUSF with NRF: {str(e)}")
+    
+    yield
+    # Shutdown
+    # Add any cleanup code here if needed
+
+app = FastAPI(lifespan=lifespan)
+
+@app.get("/ausf_service")
+def ausf_service():
+    return {"message": "AUSF service response"}
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="127.0.0.1", port=9003)
+
+# File location: 5G_Emulator_API/core_network/main.py
+# File location: 5G_Emulator_API/core_network/main.py
+# File location: 5G_Emulator_API/core_network/main.py
+import subprocess
+
+def start_nf(file_path):
+    subprocess.Popen(["python", file_path])
+
+if __name__ == "__main__":
+    # Start NRF
+    start_nf("core_network/nrf.py")
+
+    # Start Network Functions
+    start_nf("core_network/amf.py")
+    start_nf("core_network/smf.py")
+    start_nf("core_network/upf.py")
+    start_nf("core_network/ausf.py")
+    start_nf("core_network/udm.py")
+    
+    # Start gNodeB
+    start_nf("ran/gnb.py")
+
+
+# File location: 5G_Emulator_API/core_network/udr.py
+# File location: 5G_Emulator_API/core_network/udr.py
+# File location: 5G_Emulator_API/core_network/udr.py
+from fastapi import FastAPI
+from pydantic import BaseModel
+import sqlite3
+import uvicorn
+
+app = FastAPI()
+
+class UserData(BaseModel):
+    imsi: str
+    key: str
+
+def init_db():
+    conn = sqlite3.connect('udr.db')
+    c = conn.cursor()
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            imsi TEXT PRIMARY KEY,
+            key TEXT NOT NULL
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+@app.post("/register_user")
+def register_user(user: UserData):
+    conn = sqlite3.connect('udr.db')
+    c = conn.cursor()
+    c.execute('INSERT INTO users (imsi, key) VALUES (?, ?)', (user.imsi, user.key))
+    conn.commit()
+    conn.close()
+    return {"message": "User registered successfully"}
+
+@app.get("/get_user/{imsi}")
+def get_user(imsi: str):
+    conn = sqlite3.connect('udr.db')
+    c = conn.cursor()
+    c.execute('SELECT key FROM users WHERE imsi = ?', (imsi,))
+    user = c.fetchone()
+    conn.close()
+    if user:
+        return {"imsi": imsi, "key": user[0]}
+    else:
+        return {"message": "User not found"}
+
+if __name__ == "__main__":
+    init_db()
+    uvicorn.run(app, host="127.0.0.1", port=9005)
+
+
+# File location: 5G_Emulator_API/core_network/udsf.py
+# File location: 5G_Emulator_API/core_network/udsf.py
+# File location: 5G_Emulator_API/core_network/udsf.py
+from fastapi import FastAPI
+from pydantic import BaseModel
+import sqlite3
+import uvicorn
+
+app = FastAPI()
+
+class UnstructuredData(BaseModel):
+    id: str
+    data: str
+
+def init_db():
+    conn = sqlite3.connect('udsf.db')
+    c = conn.cursor()
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS unstructured_data (
+            id TEXT PRIMARY KEY,
+            data TEXT NOT NULL
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+@app.post("/store_data")
+def store_data(data: UnstructuredData):
+    conn = sqlite3.connect('udsf.db')
+    c = conn.cursor()
+    c.execute('INSERT INTO unstructured_data (id, data) VALUES (?, ?)', (data.id, data.data))
+    conn.commit()
+    conn.close()
+    return {"message": "Data stored successfully"}
+
+@app.get("/get_data/{id}")
+def get_data(id: str):
+    conn = sqlite3.connect('udsf.db')
+    c = conn.cursor()
+    c.execute('SELECT data FROM unstructured_data WHERE id = ?', (id,))
+    data = c.fetchone()
+    conn.close()
+    if data:
+        return {"id": id, "data": data[0]}
+    else:
+        return {"message": "Data not found"}
+
+if __name__ == "__main__":
+    init_db()
+    uvicorn.run(app, host="127.0.0.1", port=9006)
+
+
+# File location: 5G_Emulator_API/core_network/test.py
+# File location: 5G_Emulator_API/core_network/test.py
+# File location: 5G_Emulator_API/core_network/test.py
+import requests
+
+nrf_url = "http://127.0.0.1:8000"
+udr_url = "http://127.0.0.1:9005"
+ausf_url = "http://127.0.0.1:9003"
+
+# Register Network Functions with NRF
+def register_nfs():
+    nfs = [
+        {"nf_type": "AMF", "ip": "127.0.0.1", "port": 9000},
+        {"nf_type": "SMF", "ip": "127.0.0.1", "port": 9001},
+        {"nf_type": "UPF", "ip": "127.0.0.1", "port": 9002},
+        {"nf_type": "AUSF", "ip": "127.0.0.1", "port": 9003},
+        {"nf_type": "UDM", "ip": "127.0.0.1", "port": 9004},
+        {"nf_type": "UDR", "ip": "127.0.0.1", "port": 9005},
+        {"nf_type": "UDSF", "ip": "127.0.0.1", "port": 9006},
+        {"nf_type": "gNodeB", "ip": "127.0.0.1", "port": 38412},
+    ]
+
+    for nf in nfs:
+        response = requests.post(f"{nrf_url}/register", json=nf)
+        print(response.json())
+
+# Register a user with UDR
+def register_user():
+    user_data = {"imsi": "123456789012345", "key": "secret_key"}
+    response = requests.post(f"{udr_url}/register_user", json=user_data)
+    print(response.json())
+
+# Simulate AUSF authentication request
+def authenticate_user():
+    imsi = "123456789012345"
+    response = requests.get(f"{udr_url}/get_user/{imsi}")
+    if response.status_code == 200:
+        user_data = response.json()
+        print(f"AUSF authenticated user: {user_data}")
+    else:
+        print(f"AUSF failed to authenticate user: {response.json()}")
+
+if __name__ == "__main__":
+    register_nfs()
+    register_user()
+    authenticate_user()
+
+
+# File location: 5G_Emulator_API/ran/gnb.py
+# File location: 5G_Emulator_API/ran/gnb.py
+from fastapi import FastAPI, HTTPException
+import uvicorn
+import requests
+import asyncio
+
+app = FastAPI()
+nrf_url = "http://127.0.0.1:8000"
+amf_url = None
+
+@app.on_event("startup")
+async def register_with_nrf():
+    global amf_url
+    nf_registration = {
+        "nf_type": "gNodeB",
+        "ip": "127.0.0.1",
+        "port": 38412
+    }
+    try:
+        response = requests.post(f"{nrf_url}/register", json=nf_registration)
+        response.raise_for_status()
+        
+        # Discover AMF
+        amf_info = requests.get(f"{nrf_url}/discover/AMF").json()
+        amf_url = f"http://{amf_info['ip']}:{amf_info['port']}"
+    except requests.RequestException as e:
+        print(f"Failed to register with NRF or discover AMF: {str(e)}")
+
+@app.post("/initial_ue_message")
+async def initial_ue_message(ue_data: dict):
+    if not amf_url:
+        raise HTTPException(status_code=503, detail="AMF not discovered")
+    try:
+        response = requests.post(f"{amf_url}/initial_ue_message", json=ue_data)
+        response.raise_for_status()
+        return response.json()
+    except requests.RequestException as e:
+        raise HTTPException(status_code=500, detail=f"Failed to send initial UE message: {str(e)}")
+
+@app.get("/gnb_status")
+async def gnb_status():
+    return {"status": "operational", "amf_connected": amf_url is not None}
+
+async def periodic_amf_heartbeat():
+    while True:
+        if amf_url:
+            try:
+                response = requests.get(f"{amf_url}/heartbeat")
+                response.raise_for_status()
+                print("AMF heartbeat successful")
+            except requests.RequestException as e:
+                print(f"AMF heartbeat failed: {str(e)}")
+        await asyncio.sleep(60)  # Heartbeat every 60 seconds
+
+@app.on_event("startup")
+async def start_heartbeat():
+    asyncio.create_task(periodic_amf_heartbeat())
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="127.0.0.1", port=38412)
+
+# File location: 5G_Emulator_API/ran/cu/cu.py
+# File location: 5G_Emulator_API/ran/cu/cu.py
+from fastapi import FastAPI
+import uvicorn
+import requests
+from contextlib import asynccontextmanager
+
+nrf_url = "http://127.0.0.1:8000"
+du_url = "http://127.0.0.1:9007"
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    nf_registration = {
+        "nf_type": "CU",
+        "ip": "127.0.0.1",
+        "port": 9008
+    }
+    try:
+        response = requests.post(f"{nrf_url}/register", json=nf_registration)
+        response.raise_for_status()
+        print("CU registered with NRF")
+    except requests.RequestException as e:
+        print(f"Failed to register CU with NRF: {str(e)}")
+    
+    yield
+    # Shutdown
+    # Add any cleanup code here if needed
+
+app = FastAPI(lifespan=lifespan)
+
+@app.post("/cu_to_du")
+def cu_to_du(data: dict):
+    response = requests.post(f"{du_url}/du_service", json=data)
+    return response.json()
+
+@app.get("/cu_service")
+def cu_service():
+    return {"message": "CU service response"}
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="127.0.0.1", port=9008)
+
+# File location: 5G_Emulator_API/ran/cu/rrc.py
+# File location: 5G_Emulator_API/ran/cu/rrc.py
+# File location: 5G_Emulator_API/ran/cu/rrc.py
+def handle_rrc_message(message):
+    print(f"RRC Message: {message}")
+    # Add detailed RRC processing here
+
+
+# File location: 5G_Emulator_API/ran/cu/pdcp.py
+# File location: 5G_Emulator_API/ran/cu/pdcp.py
+# File location: 5G_Emulator_API/ran/cu/pdcp.py
+def handle_pdcp_message(message):
+    print(f"PDCP Message: {message}")
+    # Add detailed PDCP processing here
+
+
+# File location: 5G_Emulator_API/ran/cu/sdap.py
+# File location: 5G_Emulator_API/ran/cu/sdap.py
+# File location: 5G_Emulator_API/ran/cu/sdap.py
+def handle_sdap_message(message):
+    print(f"SDAP Message: {message}")
+    # Add detailed SDAP processing here
+
+
+# File location: 5G_Emulator_API/ran/du/du.py
+# File location: 5G_Emulator_API/ran/du/du.py
+from fastapi import FastAPI
+import uvicorn
+import requests
+from contextlib import asynccontextmanager
+
+nrf_url = "http://127.0.0.1:8000"
+cu_url = "http://127.0.0.1:9008"
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    nf_registration = {
+        "nf_type": "DU",
+        "ip": "127.0.0.1",
+        "port": 9007
+    }
+    try:
+        response = requests.post(f"{nrf_url}/register", json=nf_registration)
+        response.raise_for_status()
+        print("DU registered with NRF")
+    except requests.RequestException as e:
+        print(f"Failed to register DU with NRF: {str(e)}")
+    
+    yield
+    # Shutdown
+    # Add any cleanup code here if needed
+
+app = FastAPI(lifespan=lifespan)
+
+@app.post("/du_service")
+def du_service(data: dict):
+    print(f"Received data at DU: {data}")
+    return {"message": "DU received data"}
+
+@app.get("/du_to_cu")
+def du_to_cu(data: dict):
+    response = requests.post(f"{cu_url}/cu_service", json=data)
+    return response.json()
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="127.0.0.1", port=9007)
+
+# File location: 5G_Emulator_API/ran/du/rlc.py
+# File location: 5G_Emulator_API/ran/du/rlc.py
+# File location: 5G_Emulator_API/ran/du/rlc.py
+def handle_rlc_message(message):
+    print(f"RLC Message: {message}")
+    # Add detailed RLC processing here
+
+
+# File location: 5G_Emulator_API/ran/du/mac.py
+# File location: 5G_Emulator_API/ran/du/mac.py
+# File location: 5G_Emulator_API/ran/du/mac.py
+def handle_mac_message(message):
+    print(f"MAC Message: {message}")
+    # Add detailed MAC processing here
+
+
+# File location: 5G_Emulator_API/ran/du/phy.py
+# File location: 5G_Emulator_API/ran/du/phy.py
+# File location: 5G_Emulator_API/ran/du/phy.py
+def handle_phy_message(message):
+    print(f"PHY Message: {message}")
+    # Add detailed PHY processing here
+
+
+# File location: 5G_Emulator_API/ran/rru/rru.py
+# File location: 5G_Emulator_API/ran/rru/rru.py
+import time
+
+def run_rru():
+    print("RRU started")
+    while True:
+        print("RRU running...")
+        time.sleep(60)
+
+if __name__ == "__main__":
+    run_rru()
+
+# File location: 5G_Emulator_API/ptp/ptp.py
+# File location: 5G_Emulator_API/ptp/ptp.py
+import time
+
+def synchronize_clock():
+    print("Synchronizing clock using PTP")
+    while True:
+        print("PTP synchronization in progress...")
+        time.sleep(60)
+
+if __name__ == "__main__":
+    synchronize_clock()
+

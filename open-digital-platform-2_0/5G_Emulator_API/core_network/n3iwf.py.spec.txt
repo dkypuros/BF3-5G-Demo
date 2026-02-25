@@ -1,0 +1,323 @@
+================================================================================
+                    SPECIFICATION MAP: n3iwf.py
+           Non-3GPP Interworking Function - Spec Reference Bridge
+================================================================================
+
+Source File: 5G_Emulator_API/core_network/n3iwf.py
+Generated:   2026-01-10
+Lines:       728
+Purpose:     Map each code section to governing 3GPP specifications
+Based On:    Free5GC N3IWF implementation
+
+================================================================================
+PRIMARY GOVERNING SPECIFICATIONS
+================================================================================
+
+3GPP TS 24.502 - Access to 5GCN via Non-3GPP Access
+  Location: 90_Work-Telco/3GPP/Rel-19/24_series/
+  Scope: UE procedures for non-3GPP access
+  Key Sections:
+    - Section 7: Registration procedures
+    - Section 8: Service request procedures
+    - Section 9: PDU session procedures
+
+3GPP TS 23.502 - Procedures for 5G System
+  Location: 90_Work-Telco/3GPP/Rel-19/23_series/
+  Scope: N3IWF procedures
+  Key Sections:
+    - Section 4.12: Non-3GPP access procedures
+
+3GPP TS 33.501 - Security Architecture for 5G System
+  Location: 90_Work-Telco/3GPP/Rel-19/33_series/
+  Scope: Non-3GPP access security
+  Key Sections:
+    - Section 7: Non-3GPP access security (EAP-AKA')
+
+RFC 7296 - IKEv2 Protocol
+  Scope: IPSec tunnel establishment
+
+RFC 5448 - EAP-AKA'
+  Scope: Authentication over non-3GPP access
+
+
+================================================================================
+LINE-BY-LINE SPECIFICATION MAPPING
+================================================================================
+
+
+LINES 1-31: MODULE HEADER AND IMPORTS
+--------------------------------------------------------------------------------
+
+Lines 1-4: Module Documentation
+  Reference: Free5GC N3IWF
+  3GPP Specs: TS 29.502, TS 24.502
+
+Lines 6-21: Imports
+  - FastAPI: HTTP API framework
+  - secrets: For SPI generation
+  - OpenTelemetry: Distributed tracing
+
+
+LINES 33-138: DATA MODELS
+--------------------------------------------------------------------------------
+
+Lines 35-39: class AuthMethod(Enum)
+  Spec: TS 33.501 Section 7.2 - Authentication methods
+
+  Methods:
+    - 5G_AKA: 5G AKA over non-3GPP
+    - EAP_AKA_PRIME: EAP-AKA' (mandatory for non-3GPP)
+    - EAP_TLS: Certificate-based (optional)
+
+Lines 40-48: class IkeState(Enum)
+  Spec: RFC 7296 - IKEv2 states
+
+  States:
+    - INITIAL: Not started
+    - IKE_SA_INIT: IKE SA establishment
+    - IKE_AUTH: Authentication phase
+    - CHILD_SA: Child SA creation
+    - ESTABLISHED: Tunnel active
+    - REKEY: Rekeying in progress
+    - DELETED: Tunnel deleted
+
+Lines 49-54: class UeContextState(Enum)
+  Spec: TS 24.502 - UE states
+
+  States: IDLE, CONNECTING, CONNECTED, DISCONNECTING
+
+Lines 55-67: class PlmnId, Snssai, Guami
+  Spec: TS 29.571 - Common Data Types
+
+Lines 68-85: class IkeSecurityAssociation
+  Spec: RFC 7296 Section 2 - IKE SA
+
+  IKE SA parameters:
+    - spi_initiator/spi_responder: Security Parameter Indexes
+    - encryption_algorithm: ENCR_AES_CBC
+    - integrity_algorithm: AUTH_HMAC_SHA2_256_128
+    - dh_group: Diffie-Hellman group (2048-bit MODP)
+    - prf_algorithm: PRF_HMAC_SHA2_256
+    - lifetime: SA validity (86400s default)
+
+Lines 86-96: class ChildSecurityAssociation, IPSecTunnel
+  Spec: RFC 7296 Section 2.9 - Child SA
+
+  IPSec tunnel contains:
+    - Inner IPs (for tunnel mode)
+    - Outer IPs (public addresses)
+    - IKE SA and Child SA
+    - Tunnel state
+
+Lines 97-112: class UeContext
+  Spec: TS 24.502 - UE context at N3IWF
+
+  Context contains:
+    - UE identifiers (SUPI, GPSI)
+    - Authentication method
+    - PLMN and slice info
+    - AMF assignment
+    - IPSec tunnel
+    - PDU sessions
+    - NAS security context
+
+Lines 113-138: NAS and Request Models
+  Spec: TS 24.501 - 5GS NAS protocol
+
+  NasMessage: NAS message structure
+  RegistrationRequest: UE registration data
+  PDUSessionRequest: PDU session establishment data
+
+
+LINES 139-146: N3IWF STORAGE
+--------------------------------------------------------------------------------
+
+Lines 140-146: Storage structures
+
+  - ue_contexts: UE context storage
+  - ipsec_tunnels: Active IPSec tunnels
+  - registration_requests: Pending registrations
+  - amf_ue_ngap_ids: AMF UE NGAP ID mapping
+  - ran_ue_ngap_ids: RAN UE NGAP ID mapping
+
+
+LINES 148-439: N3IWF CLASS
+--------------------------------------------------------------------------------
+
+Lines 148-169: class N3IWF.__init__
+  Initializes N3IWF configuration
+
+  Configuration:
+    - n3iwf_ip: N3IWF IP address
+    - ike_port: IKE port (500)
+    - nat_t_port: NAT-T port (4500)
+    - ip_pool: Inner IP allocation pool
+    - supported_snssai: Supported slices
+
+Lines 170-174: allocate_inner_ip()
+  Allocates inner IP for IPSec tunnel (tunnel mode)
+
+Lines 176-186: create_ue_context() / get_ue_context()
+  UE context management
+
+Lines 187-230: establish_ipsec_tunnel()
+  Spec: RFC 7296 - IKEv2 tunnel establishment
+
+  Simulates IKE_SA_INIT and IKE_AUTH exchanges:
+    1. Generate SPIs
+    2. Create IKE SA with algorithms
+    3. Create Child SA for IPSec
+    4. Allocate inner IPs
+    5. Return tunnel info
+
+Lines 232-291: handle_registration()
+  Spec: TS 24.502 Section 7.2 - Registration over non-3GPP
+
+  Procedure per TS 24.502:
+    1. Create/get UE context
+    2. Assign RAN UE NGAP ID
+    3. Build Initial UE Message (NGAP)
+    4. Store registration request
+
+Lines 292-321: handle_authentication_response()
+  Spec: TS 33.501 Section 7.2.1 - EAP-AKA' over IKEv2
+
+  Handles EAP response, derives keys:
+    - KAMF: AMF key
+    - KNAS_int/KNAS_enc: NAS keys
+    - KN3IWF: N3IWF key
+
+Lines 322-355: complete_registration()
+  Spec: TS 24.502 Section 7.2 - Registration completion
+
+  Updates context with AMF response:
+    - AMF UE NGAP ID
+    - Allowed NSSAI
+    - GUAMI
+
+Lines 356-412: establish_pdu_session() / release_pdu_session()
+  Spec: TS 24.502 Section 9 - PDU session over non-3GPP
+
+  Creates PDU session with:
+    - Session type (IPv4/IPv6)
+    - SSC mode
+    - DNN and S-NSSAI
+    - QoS flows
+
+Lines 413-439: deregister_ue()
+  Spec: TS 24.502 Section 7.3 - Deregistration
+
+  Cleans up:
+    - PDU sessions
+    - IPSec tunnel
+    - UE context
+
+
+LINES 444-488: NRF REGISTRATION
+--------------------------------------------------------------------------------
+
+Lines 444-488: lifespan() - Startup/Shutdown
+  Spec: TS 29.510 - Nnrf_NFManagement service
+
+  NF Profile per TS 29.510:
+    - nfServices: n3iwf-sbi
+    - n3iwfInfo: IPv4/IPv6 endpoints, N3IWF ID
+
+
+LINES 507-666: N3IWF API ENDPOINTS
+--------------------------------------------------------------------------------
+
+Lines 509-562: IPSec Tunnel Management
+  - POST /n3iwf/ipsec/initiate: Initiate tunnel
+  - GET /n3iwf/ipsec/tunnels: List tunnels
+  - DELETE /n3iwf/ipsec/tunnels/{id}: Delete tunnel
+
+Lines 566-633: Registration Endpoints
+  Spec: TS 24.502 Section 7
+
+  - POST /n3iwf/registration: Handle registration
+  - POST /n3iwf/authentication/{ueId}: Handle auth response
+  - POST /n3iwf/registration/{ueId}/complete: Complete registration
+  - POST /n3iwf/deregistration/{ueId}: Deregister UE
+
+Lines 637-666: PDU Session Endpoints
+  Spec: TS 24.502 Section 9
+
+  - POST /n3iwf/pdu-session: Establish session
+  - DELETE /n3iwf/pdu-session/{ueId}/{id}: Release session
+
+
+LINES 668-728: UE CONTEXT AND HEALTH
+--------------------------------------------------------------------------------
+
+Lines 670-695: UE Context Endpoints
+  - GET /n3iwf/ue-contexts: List all contexts
+  - GET /n3iwf/ue-contexts/{ueId}: Get context details
+
+Lines 699-723: Health and metrics
+  Returns:
+    - Connected UEs
+    - Active tunnels
+    - Total PDU sessions
+
+
+================================================================================
+SPECIFICATION CROSS-REFERENCE TABLE
+================================================================================
+
+| Code Section              | Primary Spec | Section        |
+|---------------------------|--------------|----------------|
+| AuthMethod                | TS 33.501    | 7.2            |
+| IkeSecurityAssociation    | RFC 7296     | 2              |
+| ChildSecurityAssociation  | RFC 7296     | 2.9            |
+| UeContext                 | TS 24.502    | -              |
+| establish_ipsec_tunnel    | RFC 7296     | -              |
+| handle_registration       | TS 24.502    | 7.2            |
+| handle_authentication     | TS 33.501    | 7.2.1          |
+| establish_pdu_session     | TS 24.502    | 9              |
+| deregister_ue             | TS 24.502    | 7.3            |
+| NRF registration          | TS 29.510    | 5.2.2.2        |
+
+
+================================================================================
+NON-3GPP ACCESS PROCEDURE (TS 24.502)
+================================================================================
+
+    UE                N3IWF              AMF              AUSF
+     |                  |                 |                 |
+     |==IKE_SA_INIT===>|                 |                 |
+     |<==IKE_SA_INIT===|                 |                 |
+     |                  |                 |                 |
+     |==IKE_AUTH======>|                 |                 |
+     |  (with EAP-5G)  |                 |                 |
+     |                  |--Initial UE--->|                 |
+     |                  |                 |--Auth Request-->|
+     |                  |                 |<--Auth Vector---|
+     |                  |<--DL NAS-------|                 |
+     |<==IKE_AUTH======|                 |                 |
+     |  (EAP-AKA')     |                 |                 |
+     |==IKE_AUTH======>|                 |                 |
+     |  (EAP Response) |--UL NAS------->|                 |
+     |                  |                 |--Auth Confirm-->|
+     |                  |<--DL NAS-------|                 |
+     |<==IKE_AUTH======|                 |                 |
+     |  (Reg Accept)   |                 |                 |
+     |                  |                 |                 |
+     | [IPSec Tunnel Established]        |                 |
+
+
+================================================================================
+N3IWF INTERFACE MAPPING
+================================================================================
+
+| Interface | Connected NF | Protocol | Purpose                    |
+|-----------|--------------|----------|----------------------------|
+| NWu       | UE           | IKEv2    | IPSec tunnel setup         |
+| N2        | AMF          | NGAP     | NAS transport              |
+| N3        | UPF          | GTP-U    | User plane data            |
+| Nnrf      | NRF          | HTTP/SBI | NF registration            |
+
+
+================================================================================
+                              END OF DOCUMENT
+================================================================================

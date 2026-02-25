@@ -1,0 +1,651 @@
+================================================================================
+              SPECIFICATION-TO-SOURCE CODE ANALYSIS REPORT
+                     3GPP Release 19 vs 5G Lab Implementation
+                              Generated: 2026-01-06
+================================================================================
+
+EXECUTIVE SUMMARY
+--------------------------------------------------------------------------------
+This analysis examines the unique opportunity presented by having both the
+actual 3GPP Release 19 specification documents AND the 5G simulation lab
+source code in adjacent directories. This creates a rare ability to perform
+direct specification-to-implementation validation.
+
+KEY FINDING: The 3GPP folder contains 322+ machine-readable OpenAPI YAML
+files that define the exact API contracts for 5G network functions. These
+can be directly compared against and used to enhance the Python FastAPI
+implementations in the 5G lab.
+
+
+================================================================================
+PART 1: AVAILABLE SPECIFICATION ASSETS
+================================================================================
+
+Location: ./3GPP/Rel-19 (local reference)
+
+DOCUMENT FORMAT BREAKDOWN:
+--------------------------------------------------------------------------------
+
+1. OpenAPI YAML Specifications (Machine-Readable)
+   - Total Count: 322+ files in 29_series alone
+   - Format: OpenAPI 3.0 standard
+   - Contents: Complete API definitions including:
+     * Endpoint paths and HTTP methods
+     * Request/response schemas (JSON Schema format)
+     * Security requirements (OAuth2 scopes)
+     * Error codes and response types
+     * Data type definitions
+
+2. DOCX Specification Documents (Human-Readable)
+   - 23_series: System Architecture (TS 23.501, 23.502, etc.)
+   - 24_series: NAS Protocol specifications
+   - 29_series: Service-Based Interface APIs
+   - 32_series: Charging specifications
+   - 33_series: Security specifications
+   - 38_series: NR (New Radio) RAN specifications
+
+3. Supplementary Files
+   - ABNF grammar files (e.g., TS29502_CustomHeaders.abnf)
+   - SDL (Specification Description Language) files
+   - ASN.1 definitions (in 46_series)
+
+
+================================================================================
+PART 2: SOURCE CODE IMPLEMENTATION INVENTORY
+================================================================================
+
+Location: ./BF3-5G-Demo (this repository)
+
+CORE NETWORK FUNCTIONS (Python/FastAPI):
+--------------------------------------------------------------------------------
+
+File: core_network/amf.py
+  - Implements: AMF (Access and Mobility Management Function)
+  - Relevant Specs: TS29502_Nsmf_PDUSession.yaml, TS29518_Namf_*.yaml
+  - API Endpoints:
+    * POST /amf/handover (NGAP Handover)
+    * POST /amf/pdu-session/create (PDU Session Establishment)
+    * GET/POST /amf/ue/{ue_id} (UE Context Management)
+  - Observations:
+    * Uses OpenTelemetry for tracing with 3GPP-aligned span attributes
+    * Implements N11 interface toward SMF
+    * References TS 23.502 Section 4.3.2.2.1 in code comments
+
+File: core_network/smf.py
+  - Implements: SMF (Session Management Function)
+  - Relevant Specs: TS29502_Nsmf_PDUSession.yaml
+  - API Endpoints:
+    * POST /nsmf-pdusession/v1/sm-contexts (Create SM Context)
+    * GET /smf/sessions (Session monitoring)
+  - Observations:
+    * Endpoint path matches official spec exactly
+    * Implements N4 interface toward UPF using PFCP modeling
+    * Creates PDR/FAR/QER structures per TS 29.244
+
+File: core_network/nrf.py
+  - Implements: NRF (Network Repository Function)
+  - Relevant Specs: TS29510_Nnrf_NFManagement.yaml,
+                    TS29510_Nnrf_NFDiscovery.yaml,
+                    TS29510_Nnrf_AccessToken.yaml
+  - API Endpoints:
+    * PUT /nnrf-nfm/v1/nf-instances/{nfInstanceId} (Register NF)
+    * GET /nnrf-disc/v1/nf-instances (Discovery)
+    * POST /oauth2/token (Access Token)
+    * POST /nnrf-nfm/v1/subscriptions (Status Subscription)
+  - Observations:
+    * Most complete 3GPP alignment in the codebase
+    * Pydantic models match spec data types (NFProfile, Snssai, PlmnId)
+    * Implements OAuth2 security per TS 29.500
+    * 706 lines of production-quality code
+
+File: core_network/upf.py / upf_enhanced.py
+  - Implements: UPF (User Plane Function)
+  - Relevant Specs: TS29244 (PFCP), TS29281 (GTP-U)
+  - Features: PFCP session handling, N4 interface
+
+File: core_network/pcf.py
+  - Implements: PCF (Policy Control Function)
+  - Relevant Specs: TS29507_Npcf_AMPolicyControl.yaml,
+                    TS29512_Npcf_SMPolicyControl.yaml
+
+File: core_network/ausf.py
+  - Implements: AUSF (Authentication Server Function)
+  - Relevant Specs: TS29509_Nausf_UEAuthentication.yaml
+
+File: core_network/udm.py
+  - Implements: UDM (Unified Data Management)
+  - Relevant Specs: TS29503_Nudm_*.yaml (10 YAML files available)
+
+
+RAN COMPONENTS:
+--------------------------------------------------------------------------------
+
+Directory: ran/cu/
+  - cu.py, rrc.py, pdcp.py, sdap.py
+  - Implements CU (Centralized Unit) with protocol stack
+  - Relevant Specs: TS38463 (F1AP), TS38331 (RRC)
+
+Directory: ran/du/
+  - du.py, mac.py, rlc.py, phy.py
+  - Implements DU (Distributed Unit) with full Layer 2 stack
+  - Relevant Specs: TS38321 (MAC), TS38322 (RLC), TS38323 (PDCP)
+
+File: ran/gnb.py
+  - Implements gNB wrapper combining CU and DU
+  - Relevant Specs: TS38413 (NGAP), TS38401 (Architecture)
+
+
+================================================================================
+PART 3: OPPORTUNITY ANALYSIS - SPEC-TO-CODE BRIDGES
+================================================================================
+
+The co-location of specifications and implementation code creates several
+powerful opportunities:
+
+OPPORTUNITY 1: Automated API Validation
+--------------------------------------------------------------------------------
+The OpenAPI YAML files can be used to automatically validate that the Python
+FastAPI implementations conform to 3GPP specifications.
+
+Example validation chain:
+  TS29502_Nsmf_PDUSession.yaml  -->  smf.py:/nsmf-pdusession/v1/sm-contexts
+
+The YAML file defines:
+  - Path: /sm-contexts
+  - Method: POST
+  - Request Body Schema: SmContextCreateData
+  - Response Schema: SmContextCreatedData
+  - Security: oAuth2ClientCredentials with scope "nsmf-pdusession"
+
+Your implementation at smf.py:144 matches the path. Validation opportunities:
+  1. Schema validation of request/response against YAML definitions
+  2. Automatic test generation from spec examples
+  3. API documentation generation
+
+
+OPPORTUNITY 2: Code Generation from Specifications
+--------------------------------------------------------------------------------
+The 322 YAML files can be used to:
+  - Generate Python Pydantic models automatically
+  - Generate FastAPI route stubs with correct signatures
+  - Create TypeScript/JavaScript client code for the frontend
+  - Generate comprehensive API documentation
+
+Tools that can process these:
+  - openapi-generator-cli
+  - datamodel-code-generator (YAML to Pydantic)
+  - fastapi-code-generator
+
+
+OPPORTUNITY 3: Learning/Documentation Cross-Reference
+--------------------------------------------------------------------------------
+Your Networking Public Data folder (21_Networking_Public_Data) provides
+foundational networking knowledge that maps to 3GPP concepts:
+
+  21_Networking_Public_Data/        -->  3GPP Mapping
+  -------------------------------------------------------------------------
+  04_Routing/                       -->  UPF routing, N6 interface
+  09_QoS/                           -->  5QI, QoS Flows, PCC rules
+  11_VPN_Tunneling/                 -->  GTP-U tunnels, N3/N9 interfaces
+  12_Tunneling/                     -->  GTP encapsulation
+  15_Data_Center/                   -->  5G Core deployment patterns
+  17_SDN/                           -->  Network slicing control
+  21_Authentication/                -->  5G-AKA, SUPI/SUCI, AUSF
+
+
+OPPORTUNITY 4: Test Case Generation
+--------------------------------------------------------------------------------
+The YAML specifications contain example values and constraints that can be
+used to generate comprehensive test suites:
+
+From TS29502_Nsmf_PDUSession.yaml:
+  - Valid SUPI formats (regex patterns)
+  - S-NSSAI value constraints (SST: 0-255, SD: 6 hex chars)
+  - DNN string requirements
+  - Error response codes and scenarios
+
+
+OPPORTUNITY 5: Release Gap Analysis
+--------------------------------------------------------------------------------
+Your implementation targets Release 16, but you have Release 19 specs.
+Systematic comparison can identify:
+
+  - New NF types added in Rel-17/18/19 (TSCTSF, EASDF, NSACF, etc.)
+  - New API operations added to existing NFs
+  - Schema changes in existing data types
+  - New optional parameters
+  - Deprecated features
+
+Example: Your YAML files include several Rel-19 additions:
+  - TS29520_Nnwdaf_*.yaml (AI/ML Network Analytics)
+  - TS29522_VFL*.yaml (Federated Learning)
+  - TS29558_E*.yaml (Edge Computing Services)
+
+
+================================================================================
+PART 4: SPECIFIC ALIGNMENT ANALYSIS
+================================================================================
+
+NRF IMPLEMENTATION vs TS29510
+--------------------------------------------------------------------------------
+
+Your nrf.py implements these operations from the spec:
+
+  Spec Section              Your Implementation               Status
+  ---------------------------------------------------------------------------
+  5.2.2.2.1 RegisterNF      PUT /nnrf-nfm/v1/nf-instances/    ALIGNED
+  5.2.2.3.1 GetNF           GET /nnrf-nfm/v1/nf-instances/    ALIGNED
+  5.2.2.4.1 UpdateNF        PATCH /nnrf-nfm/v1/nf-instances/  ALIGNED
+  5.2.2.5.1 DeregisterNF    DELETE /nnrf-nfm/v1/nf-instances/ ALIGNED
+  5.2.3.2.1 SearchNF        GET /nnrf-disc/v1/nf-instances    ALIGNED
+  5.2.4.2.1 Subscribe       POST /nnrf-nfm/v1/subscriptions   ALIGNED
+
+Data Models Comparison:
+  - NFProfile: Your Pydantic model has 60+ fields matching spec
+  - NFType enum: 17 values implemented (spec has additional in Rel-19)
+  - Snssai: Correctly models SST + SD
+  - PlmnId: Correctly models MCC + MNC with regex validation
+
+
+SMF IMPLEMENTATION vs TS29502
+--------------------------------------------------------------------------------
+
+Your smf.py:/nsmf-pdusession/v1/sm-contexts endpoint:
+
+  Spec Requirement                      Your Implementation
+  ---------------------------------------------------------------------------
+  Path: /sm-contexts                    MATCH at line 144
+  Method: POST                          MATCH
+  Content-Type: multipart/related       PARTIAL (you use JSON only)
+  Binary N1/N2 data support             NOT IMPLEMENTED
+  OAuth2 security                       NOT IMPLEMENTED on this endpoint
+  Required fields validation            IMPLEMENTED at lines 157-161
+
+The spec allows both JSON-only and multipart responses. Your implementation
+correctly validates required 3GPP fields: supi, pduSessionId, dnn, sNssai,
+anType.
+
+
+================================================================================
+PART 5: RECOMMENDED ACTIONS
+================================================================================
+
+IMMEDIATE OPPORTUNITIES:
+--------------------------------------------------------------------------------
+
+1. Generate Pydantic Models from YAML
+   Run: datamodel-codegen --input TS29510_Nnrf_NFManagement.yaml \
+                          --output nrf_models.py
+   This will create type-safe models that exactly match the specification.
+
+2. Create API Test Suite
+   Use the YAML files with tools like Schemathesis to automatically
+   generate API tests that validate your implementation against specs.
+
+3. Build Spec-to-Code Cross-Reference Index
+   Create a mapping document linking each Python file/function to its
+   corresponding 3GPP specification section.
+
+4. Implement Missing Security
+   The specs require OAuth2 on most endpoints. Your NRF has it, but other
+   NFs (SMF, AMF) should call NRF for tokens before inter-NF communication.
+
+
+MEDIUM-TERM OPPORTUNITIES:
+--------------------------------------------------------------------------------
+
+1. NWDAF Integration
+   You have TS29520_Nnwdaf_*.yaml specs. With your OpenTelemetry
+   instrumentation already in place, you could implement:
+   - Analytics subscription
+   - Event exposure
+   - ML model provision
+   This would enable AI-driven network optimization using your existing
+   telemetry data.
+
+2. Network Slicing Enhancement
+   Specs available: TS29435_NSCE_*.yaml (14 files for slice management)
+   Your simulation could model multi-slice scenarios with policy control.
+
+3. Edge Computing Services
+   Specs available: TS29558_E*.yaml (Edge Enabler Services)
+   Could extend your UPF to support LADN and edge traffic steering.
+
+
+================================================================================
+PART 6: SUMMARY STATISTICS
+================================================================================
+
+SPECIFICATION COVERAGE:
+  - Total YAML API specs available: 322+ files
+  - Total .docx spec documents: ~2000 files across all series
+  - Your implementation references: ~15 key specifications
+
+CODE-SPEC ALIGNMENT:
+  - NRF: HIGH (endpoint paths, data models, operations all match)
+  - SMF: MEDIUM (correct paths, partial feature coverage)
+  - AMF: MEDIUM (custom endpoints, references specs in comments)
+  - UPF: LOW (PFCP modeled but not full protocol)
+  - RAN: MEDIUM (protocol layers present, simplified)
+
+UNIQUE VALUE:
+  The ability to trace from:
+    Source Code Line --> API Endpoint --> OpenAPI YAML --> 3GPP TS Document
+
+  This traceability is rare and valuable for:
+    - Compliance verification
+    - Educational purposes
+    - Feature development
+    - Debugging protocol issues
+    - Preparing for interoperability testing
+
+
+================================================================================
+CONCLUSION
+================================================================================
+
+Your setup represents a significant opportunity to understand telecommunications
+specifications through working code. The presence of machine-readable OpenAPI
+YAML files alongside the Python implementations enables automated validation,
+code generation, and systematic feature coverage analysis.
+
+The 5G lab implementation demonstrates solid architectural alignment with 3GPP
+standards. The most immediate enhancement opportunities are:
+
+1. Auto-generate Pydantic models from YAML specs for type safety
+2. Add OAuth2 security flow to all NF-to-NF communications
+3. Implement NWDAF analytics using your existing telemetry infrastructure
+4. Create automated compliance tests using the YAML specifications
+
+This spec-to-code alignment capability is particularly valuable for:
+- Training and education on 5G architecture
+- Prototyping new 3GPP features before Rel-19 commercial availability
+- Validating understanding of complex inter-NF procedures
+- Building compliant test tools for commercial equipment validation
+
+
+================================================================================
+APPENDIX A: COMPLETE 3GPP RELEASE 19 SPECIFICATION INVENTORY
+================================================================================
+
+Location: ./3GPP/Rel-19 (local reference)
+
+SERIES BREAKDOWN (Total: ~2,400 files):
+--------------------------------------------------------------------------------
+
+  Series       Files    Description
+  ---------------------------------------------------------------------------
+  21_series       8     Requirements (TR 21.xxx)
+  22_series     132     Service Requirements (TS 22.xxx)
+  23_series     177     System Architecture (TS 23.501, 23.502, etc.)
+  24_series     180     NAS/MM Protocols (TS 24.501, etc.)
+  25_series     103     UTRAN Radio Interface
+  26_series     299     Codecs and Media (TS 26.xxx)
+  27_series       7     Data Terminal Equipment
+  28_series     308     Charging (TS 28.xxx)
+  29_series     522     Service-Based Interface APIs (YAML + DOCX)
+  31_series      19     SIM/USIM/ISIM (TS 31.xxx)
+  32_series     147     OAM&P Telecommunication Management
+  33_series     100     Security (TS 33.501, etc.)
+  34_series      13     Test Specifications
+  35_series      30     Security Algorithms
+  36_series     106     LTE Radio (TS 36.xxx)
+  37_series      44     Multiple Radio Technologies
+  38_series     181     NR Radio (TS 38.xxx) - New Radio specs
+  41_series       2     3GPP Work Item Descriptions
+  42_series       4     Network Identity/Numbering
+  43_series      25     GSM/GERAN Radio
+  44_series      22     GSM Core Network
+  45_series      18     GSM Terminal Adaption
+  46_series     123     Test Specifications and ASN.1
+  48_series      20     GSM BSS-MSC Interface
+  49_series       3     Location Services
+  51_series       4     GSM Release Independent
+  52_series       3     GSM O&M
+  55_series      13     Security Algorithms (GSM)
+
+
+KEY SERIES FOR 5G CORE (29_series Detail):
+--------------------------------------------------------------------------------
+
+The 29_series contains 522 files including 322+ OpenAPI YAML specifications.
+These are the machine-readable API contracts for all 5G SBI services:
+
+  NF Service APIs (Selected):
+  ---------------------------------------------------------------------------
+  TS29502_Nsmf_PDUSession.yaml        SMF Session Management
+  TS29503_Nudm_*.yaml (10 files)      UDM Services (EE, SDM, UEAU, etc.)
+  TS29507_Npcf_AMPolicyControl.yaml   PCF AM Policy
+  TS29509_Nausf_*.yaml (3 files)      AUSF Authentication
+  TS29510_Nnrf_*.yaml (4 files)       NRF Management & Discovery
+  TS29512_Npcf_SMPolicyControl.yaml   PCF SM Policy
+  TS29518_Namf_*.yaml (7 files)       AMF Services
+  TS29520_Nnwdaf_*.yaml (10 files)    NWDAF Analytics (AI/ML) - NEW in Rel-17+
+  TS29521_Nbsf_Management.yaml        BSF Management
+  TS29531_Nnssf_*.yaml                NSSF Slice Selection
+  TS29571_CommonData.yaml             Common Data Types (referenced by all)
+
+  Edge & IoT APIs (Rel-17+):
+  ---------------------------------------------------------------------------
+  TS29558_E*.yaml (30+ files)         Edge Computing Services (EES, ECS)
+  TS29522_*.yaml (40+ files)          NEF Exposure & IoT services
+  TS29486_VAE_*.yaml (12 files)       V2X Application Enabler
+  TS29257_UAE_*.yaml (8 files)        UAV Application Enabler
+
+
+KEY SERIES FOR RAN (38_series):
+--------------------------------------------------------------------------------
+
+The 38_series (181 files) covers NR (New Radio) specifications:
+
+  Core RAN Specs:
+  ---------------------------------------------------------------------------
+  38101-*.docx         UE Radio Transmission/Reception
+  38104-*.docx         BS Radio Transmission/Reception
+  38201-*.docx         Physical Layer General Description
+  38211-*.docx         Physical Channels and Modulation
+  38212-*.docx         Multiplexing and Channel Coding
+  38213-*.docx         Physical Layer Procedures (Control)
+  38214-*.docx         Physical Layer Procedures (Data)
+  38300-*.docx         NR Overall Description (Stage 2)
+  38321-*.docx         MAC Protocol
+  38322-*.docx         RLC Protocol
+  38323-*.docx         PDCP Protocol
+  38331-*.docx         RRC Protocol
+  38401-*.docx         NG-RAN Architecture
+  38413-*.docx         NGAP (NG Application Protocol)
+  38463-*.docx         F1AP (F1 Application Protocol)
+  38473-*.docx         E1AP (E1 Application Protocol)
+
+
+================================================================================
+APPENDIX B: NETWORKING PUBLIC DATA INVENTORY
+================================================================================
+
+Location: ./Networking_Public_Data (local reference)
+
+COMPLETE FOLDER STRUCTURE (48 categories):
+--------------------------------------------------------------------------------
+
+  FOUNDATIONAL NETWORKING (01-13):
+  ---------------------------------------------------------------------------
+  00_Index/                    Index and overview
+  01_Layer2_DataLink/          Ethernet, MAC, VLAN, STP
+  02_Layer3_Network/           IPv4, IPv6, ICMP, ARP
+  03_Layer4_Transport/         TCP, UDP, SCTP, DCCP
+  04_Routing/                  BGP, OSPF, IS-IS, RIP
+  05_First_Hop_Redundancy/     HSRP, VRRP, GLBP
+  06_BFD/                      Bidirectional Forwarding Detection
+  07_MPLS_Advanced/            MPLS, LDP, RSVP-TE
+  08_Segment_Routing/          SR-MPLS, SRv6
+  09_QoS/                      DiffServ, IntServ, Traffic Shaping
+  10_Multicast/                IGMP, PIM, MSDP
+  11_VPN_Tunneling/            IPsec, GRE, VXLAN
+  12_Tunneling/                Generic tunneling protocols
+  13_NAT/                      Network Address Translation
+
+  ADVANCED NETWORKING (14-22):
+  ---------------------------------------------------------------------------
+  14_NAT_Traversal/            STUN, TURN, ICE
+  15_Data_Center/              EVPN, VXLAN Fabric
+  16_Virtualization/           NFV, VM networking
+  17_SDN/                      OpenFlow, SDN Controllers
+  18_Infrastructure_Services/  DHCP, BOOTP, NTP
+  19_DNS_Extended/             DNS, DNSSEC, DoH, DoT
+  20_Naming_Discovery/         mDNS, DNS-SD, NIS
+  21_Authentication/           RADIUS, TACACS+, Kerberos, 802.1X
+  22_Application_Security/     TLS, SSH, PKI
+
+  APPLICATION PROTOCOLS (23-33):
+  ---------------------------------------------------------------------------
+  23_Web/                      HTTP, HTTP/2, HTTP/3, WebSocket
+  24_Email/                    SMTP, IMAP, POP3
+  25_File_Transfer/            FTP, SFTP, SCP, TFTP
+  26_VoIP_RealTime/            SIP, RTP, RTCP, WebRTC
+  27_Monitoring/               SNMP, NetFlow, sFlow
+  28_Network_Management/       NETCONF, YANG, RESTCONF
+  29_Timing_Sync/              PTP (IEEE 1588), NTP
+  30_Congestion_Control/       TCP Congestion, ECN, BBR
+  31_Load_Balancing/           DNS LB, Anycast, HAProxy
+  32_Storage_Networking/       iSCSI, FC, NFS, SMB
+  33_Proxy/                    HTTP Proxy, SOCKS
+
+  WIRELESS & CELLULAR (34-39):
+  ---------------------------------------------------------------------------
+  34_Wireless/                 WiFi, 802.11, WPA3
+  35_Cellular/                 LTE, 5G Overview
+  36_IoT/                      MQTT, CoAP, LoRaWAN
+  37_Industrial/               PROFINET, EtherNet/IP, OPC UA
+  38_IPv6_Transition/          6to4, NAT64, DS-Lite
+  39_Legacy/                   ATM, Frame Relay, X.25
+
+  TELECOM-SPECIFIC (40-48) - DIRECTLY RELEVANT TO 5G LAB:
+  ---------------------------------------------------------------------------
+  40_Telecom_3GPP/             3GPP Overview, Release History
+  41_Telecom_Core/             EPC, 5GC Architecture
+  42_Telecom_IMS/              IMS, VoLTE, VoNR
+  43_Telecom_5G_Interfaces/    N1-N33 Interfaces, SBI
+  44_Telecom_LTE_Interfaces/   S1, X2, Uu interfaces
+  45_Telecom_5G_NFs/           AMF, SMF, UPF, etc.
+  46_Telecom_Radio/            gNB, CU, DU, RU
+  47_Telecom_Security/         5G-AKA, SUPI/SUCI
+  48_Telecom_Codecs/           AMR, EVS, Video codecs
+
+
+================================================================================
+APPENDIX C: 5G LAB PROJECT STRUCTURE
+================================================================================
+
+Location: ./BF3-5G-Demo (this repository)
+
+DIRECTORY TREE:
+--------------------------------------------------------------------------------
+
+BF3-5G-Demo/
+├── demo_front-end/                 Next.js React Dashboard
+│   ├── src/
+│   │   ├── app/                    Main application routes
+│   │   ├── components/
+│   │   │   ├── analytics/          AnalyticsView.tsx
+│   │   │   ├── compliance/         MessageValidator.tsx, ComplianceInspector.tsx
+│   │   │   ├── controls/           SimulationControlPanel.tsx
+│   │   │   ├── dashboard/          MissionControlDashboard.tsx
+│   │   │   ├── network/            NetworkTopologyView.tsx
+│   │   │   └── ui/                 Shadcn UI components
+│   │   └── lib/                    Utilities
+│   └── public/                     Static assets
+│
+├── docs/                           Documentation
+│   ├── 3gpp-compliance.md          Compliance analysis
+│   ├── architecture.md             System architecture
+│   ├── core-network.md             Core network docs
+│   ├── ran-components.md           RAN documentation
+│   ├── api-reference.md            API reference
+│   └── testing.md                  Test documentation
+│
+├── open-digital-platform-2_0/      Main Backend
+│   ├── 5G_Emulator_API/
+│   │   ├── core_network/           Core NF Implementations
+│   │   │   ├── amf.py              Access & Mobility Mgmt
+│   │   │   ├── amf_nas.py          NAS Protocol Handler
+│   │   │   ├── smf.py              Session Management
+│   │   │   ├── nrf.py              Network Repository (706 lines)
+│   │   │   ├── upf.py              User Plane Function
+│   │   │   ├── upf_enhanced.py     Enhanced UPF with GTP-U
+│   │   │   ├── pcf.py              Policy Control
+│   │   │   ├── ausf.py             Authentication Server
+│   │   │   ├── udm.py              Unified Data Management
+│   │   │   ├── udr.py              Unified Data Repository
+│   │   │   └── udsf.py             Unstructured Data Storage
+│   │   │
+│   │   ├── ran/                    Radio Access Network
+│   │   │   ├── gnb.py              gNodeB wrapper
+│   │   │   ├── cu.py               Centralized Unit
+│   │   │   ├── du.py               Distributed Unit
+│   │   │   └── cu/                 CU Protocol Stack
+│   │   │       ├── rrc.py          RRC Protocol
+│   │   │       ├── pdcp.py         PDCP Protocol
+│   │   │       └── sdap.py         SDAP Protocol
+│   │   │   └── du/                 DU Protocol Stack
+│   │   │       ├── mac.py          MAC Scheduler
+│   │   │       ├── rlc.py          RLC Protocol
+│   │   │       └── phy.py          PHY Layer
+│   │   │
+│   │   ├── ptp/                    PTP Timing
+│   │   │   └── ptp.py              IEEE 1588 support
+│   │   │
+│   │   └── logs/                   Runtime logs
+│   │
+│   ├── OpenTelelmetry_Data/        Telemetry & ML
+│   │   ├── amf_traffic_gen.py      Traffic generator
+│   │   ├── cache-json-engine.py    Caching engine
+│   │   └── Granite-TS/             Time series analysis
+│   │
+│   ├── Dashboard/                  Dashboard notes
+│   ├── n6-interface-simulation/    N6 Interface
+│   │   └── services/               UPF/DN services
+│   │
+│   ├── test_3gpp_compliance.py     Compliance tests
+│   └── test_100_compliance.py      Full test suite
+│
+├── spec-analysis/                  THIS ANALYSIS FOLDER
+│   └── 1_Spec-to-Code-Analysis.txt
+│
+└── CHANGELOG.md                    Version history
+
+
+================================================================================
+APPENDIX D: CROSS-REFERENCE MATRIX
+================================================================================
+
+This matrix maps your source code files to the available specifications:
+
+  Source File                    3GPP Spec           YAML Available
+  ---------------------------------------------------------------------------
+  core_network/amf.py            TS 29.518           Yes (7 files)
+  core_network/smf.py            TS 29.502           Yes
+  core_network/nrf.py            TS 29.510           Yes (4 files)
+  core_network/upf.py            TS 29.244           Yes (PFCP)
+  core_network/pcf.py            TS 29.507, 29.512   Yes
+  core_network/ausf.py           TS 29.509           Yes (3 files)
+  core_network/udm.py            TS 29.503           Yes (10 files)
+  core_network/udr.py            TS 29.504           Yes (2 files)
+  ran/gnb.py                     TS 38.413, 38.401   DOCX only
+  ran/cu/rrc.py                  TS 38.331           DOCX only
+  ran/du/mac.py                  TS 38.321           DOCX only
+  ran/du/rlc.py                  TS 38.322           DOCX only
+
+  Networking Public Data         3GPP Mapping         Lab Usage
+  ---------------------------------------------------------------------------
+  40_Telecom_3GPP/               Overview             Context
+  43_Telecom_5G_Interfaces/      N1-N33               All NF code
+  45_Telecom_5G_NFs/             NF descriptions      core_network/*
+  46_Telecom_Radio/              RAN architecture     ran/*
+  47_Telecom_Security/           Security             ausf.py, auth
+  09_QoS/                        5QI, QoS flows       pcf.py, smf.py
+  29_Timing_Sync/                PTP                  ptp/ptp.py
+
+
+================================================================================
+                              END OF REPORT
+================================================================================

@@ -1,0 +1,290 @@
+================================================================================
+                    SPECIFICATION MAP: icscf.py
+       Interrogating Call Session Control Function - Spec Reference Bridge
+================================================================================
+
+Source File: 5G_Emulator_API/core_network/icscf.py
+Generated:   2026-01-10
+Lines:       692
+Purpose:     Map each code section to governing 3GPP specifications
+Based On:    Kamailio ims_icscf module
+
+================================================================================
+PRIMARY GOVERNING SPECIFICATIONS
+================================================================================
+
+3GPP TS 24.229 - IP Multimedia Call Control Protocol
+  Location: 90_Work-Telco/3GPP/Rel-19/24_series/24229-j41.doc
+  Scope: SIP-based call control procedures for IMS
+  Key Sections:
+    - Section 5.3: I-CSCF procedures
+    - Section 5.3.1: Registration procedures
+    - Section 5.3.2: Session routing procedures
+
+3GPP TS 29.228 - Cx and Dx Interfaces Based on Diameter
+  Location: 90_Work-Telco/3GPP/Rel-19/29_series/29228-j10.docx
+  Scope: Interface between I-CSCF/S-CSCF and HSS
+  Key Sections:
+    - Section 6.1: User-Authorization (UAR/UAA)
+    - Section 6.2: Location-Info (LIR/LIA)
+
+3GPP TS 29.229 - Cx and Dx Interfaces: Signalling Flows
+  Location: 90_Work-Telco/3GPP/Rel-19/29_series/29229-j00.docx
+  Scope: Diameter AVPs and result codes for Cx/Dx
+  Key Sections:
+    - Section 6: Diameter AVP definitions
+    - Section 7: Result codes
+
+KAMAILIO SOURCE REFERENCE:
+  Module: kamailio/src/modules/ims_icscf/
+  Key Files: cxdx_uar.c, cxdx_lir.c, scscf_list.c, location.c
+
+
+================================================================================
+LINE-BY-LINE SPECIFICATION MAPPING
+================================================================================
+
+
+LINES 1-25: MODULE HEADER AND FASTAPI SETUP
+--------------------------------------------------------------------------------
+
+Lines 1-4: Module Documentation
+  Reference: Kamailio ims_icscf module header
+  3GPP Specs: TS 24.229 Section 5.3, TS 29.228, TS 29.229
+
+Lines 6-15: Imports
+  - httpx: For Cx interface to HSS
+  - uuid: Session and ID generation
+
+
+LINES 27-124: DATA MODELS
+--------------------------------------------------------------------------------
+
+Lines 31-43: class DiameterResultCode(Enum)
+  Spec: TS 29.229 Section 7 - Experimental-Result-Code AVP
+
+  Result codes per TS 29.229:
+    - 2001: DIAMETER_SUCCESS (first registration)
+    - 2002: DIAMETER_SUBSEQUENT_REGISTRATION
+    - 2003: DIAMETER_UNREGISTERED_SERVICE
+    - 5001-5007: Error codes
+
+Lines 45-49: class UserAuthorizationType(Enum)
+  Spec: TS 29.229 Section 6.3.24 - User-Authorization-Type AVP
+
+  Values:
+    - 0: REGISTRATION
+    - 1: DE_REGISTRATION
+    - 2: REGISTRATION_AND_CAPABILITIES
+
+Lines 51-55: class ServerCapabilities(BaseModel)
+  Spec: TS 29.229 Section 6.3.4 - Server-Capabilities AVP
+
+  Contains:
+    - Mandatory-Capability AVPs
+    - Optional-Capability AVPs
+    - Server-Name AVP (optional)
+
+Lines 57-70: class ScscfEntry(BaseModel)
+  Spec: TS 24.229 Section 5.3.1.3 - S-CSCF selection
+  Kamailio: ims_icscf/scscf_list.h - scscf_entry structure
+
+  Used for S-CSCF pool management and load balancing
+
+Lines 71-84: class UARRequest/UARResponse
+  Spec: TS 29.228 Section 6.1.1 - User-Authorization-Request
+  Spec: TS 29.228 Section 6.1.2 - User-Authorization-Answer
+
+  UAR AVPs (TS 29.229):
+    - Public-Identity (6.3.4)
+    - Private-Identity (6.3.8)
+    - Visited-Network-Identifier (6.3.1)
+    - User-Authorization-Type (6.3.24)
+
+Lines 86-97: class LIRRequest/LIRResponse
+  Spec: TS 29.228 Section 6.2.1 - Location-Info-Request
+  Spec: TS 29.228 Section 6.2.2 - Location-Info-Answer
+
+  LIR AVPs:
+    - Public-Identity (6.3.4)
+    - Originating-Request (6.3.35)
+
+Lines 99-124: SIP Message Models
+  Spec: RFC 3261 - SIP
+  Spec: TS 24.229 - IMS extensions
+
+
+LINES 126-247: S-CSCF POOL MANAGEMENT
+--------------------------------------------------------------------------------
+
+Lines 130-244: class ScscfPool
+  Spec: TS 24.229 Section 5.3.1.3 - S-CSCF selection algorithm
+  Kamailio: ims_icscf/scscf_list.c
+
+  Functions mapping to Kamailio:
+
+  get_scscf_for_capabilities() → I_scscf_select()
+    Spec: TS 24.229 Section 5.3.1.3 - Selection based on capabilities
+    Algorithm:
+      1. Filter by mandatory capabilities
+      2. Score by optional capabilities
+      3. Consider load
+      4. Apply weight
+
+  get_scscf_for_user() → Lookup in user-S-CSCF assignment table
+    Spec: TS 24.229 Section 5.3.1.2 - Stored S-CSCF assignment
+
+  assign_scscf_to_user() → Store assignment after UAR success
+    Spec: TS 29.228 Section 6.1.2 - Process UAA Server-Name
+
+
+LINES 249-268: I-CSCF CONFIGURATION
+--------------------------------------------------------------------------------
+
+Lines 253-267: class IcscfConfig
+  Spec: TS 24.229 Section 5.3 - I-CSCF configuration
+  Kamailio: icscf.cfg parameters
+
+  Parameters:
+    - icscf_uri: I-CSCF SIP URI
+    - realm: IMS realm
+    - hss_uri: HSS Diameter/HTTP endpoint
+    - default_scscf_uri: Fallback S-CSCF
+
+
+LINES 270-354: CX INTERFACE - HSS COMMUNICATION
+--------------------------------------------------------------------------------
+
+Lines 274-320: send_uar_to_hss()
+  Spec: TS 29.228 Section 6.1 - User Authorization
+  Kamailio: ims_icscf/cxdx_uar.c - I_perform_user_authorization_request()
+
+  Procedure per TS 29.228:
+    1. Build UAR with Public-Identity, Private-Identity
+    2. Send to HSS
+    3. Process UAA:
+       - On FIRST_REGISTRATION: S-CSCF selection needed
+       - On SUBSEQUENT_REGISTRATION: Use returned Server-Name
+       - On error: Return appropriate SIP response
+
+Lines 322-354: send_lir_to_hss()
+  Spec: TS 29.228 Section 6.2 - Location Information
+  Kamailio: ims_icscf/cxdx_lir.c - I_perform_location_information_request()
+
+  Used for:
+    - Terminating calls: Find S-CSCF serving callee
+    - THIG (Topology Hiding): Query HSS for routing
+
+
+LINES 356-453: SIP REGISTER HANDLER
+--------------------------------------------------------------------------------
+
+Lines 360-453: handle_register()
+  Spec: TS 24.229 Section 5.3.1 - Registration procedures at I-CSCF
+  Kamailio: I-CSCF REGISTER route in icscf.cfg
+
+  Procedure per TS 24.229 Section 5.3.1.2:
+
+  Lines 372-388: UAR to HSS
+    Spec: TS 24.229 Section 5.3.1.2 step 2
+    "Send UAR with Public-Identity, Private-Identity, Visited-Network-Identifier"
+
+  Lines 391-417: Process UAA - Success
+    Spec: TS 24.229 Section 5.3.1.2 step 3
+    - FIRST_REGISTRATION: Select S-CSCF using capabilities
+    - SUBSEQUENT_REGISTRATION: Use Server-Name from UAA
+
+  Lines 419-428: Process UAA - User Unknown
+    Spec: TS 24.229 Section 5.3.1.2 step 4
+    Return 404 Not Found
+
+  Lines 431-440: Process UAA - Roaming Not Allowed
+    Spec: TS 24.229 Section 5.3.1.2 step 5
+    Return 403 Forbidden
+
+
+LINES 455-531: SIP INVITE HANDLER (TERMINATING)
+--------------------------------------------------------------------------------
+
+Lines 455-531: handle_invite()
+  Spec: TS 24.229 Section 5.3.2 - Procedures at I-CSCF for session
+  Kamailio: I-CSCF INVITE route in icscf.cfg
+
+  Procedure per TS 24.229 Section 5.3.2.1 (terminating):
+
+  Lines 473-478: LIR to HSS
+    Spec: TS 24.229 Section 5.3.2.1 step 2
+    "Query HSS for S-CSCF serving the called party"
+
+  Lines 481-495: Process LIA - Success
+    Spec: TS 24.229 Section 5.3.2.1 step 3
+    "Forward INVITE to S-CSCF from LIA"
+
+  Lines 497-519: Process LIA - User Not Found/Registered
+    Spec: TS 24.229 Section 5.3.2.1 step 4
+    - USER_UNKNOWN: 404 Not Found
+    - IDENTITY_NOT_REGISTERED: 480 Temporarily Unavailable
+
+
+LINES 572-651: MANAGEMENT APIS
+--------------------------------------------------------------------------------
+
+Lines 576-584: Cx interface test endpoints
+  Purpose: Testing UAR/LIR without S-CSCF
+
+Lines 590-642: S-CSCF pool management
+  Spec: TS 24.229 Section 5.3.1.3 - S-CSCF administration
+
+  Endpoints:
+    - GET /scscf-pool: List available S-CSCFs
+    - POST /scscf-pool: Add S-CSCF
+    - DELETE /scscf-pool/{id}: Remove S-CSCF
+    - PUT /scscf-pool/{id}/load: Update load (for load balancing)
+
+
+LINES 652-692: HEALTH AND STARTUP
+--------------------------------------------------------------------------------
+
+Lines 656-672: root endpoint (/)
+  Returns I-CSCF status with HSS connectivity info
+
+Lines 674-677: health endpoint (/health)
+  Standard health check
+
+Lines 683-691: Main entry point
+  Starts on port 9031
+
+
+================================================================================
+SPECIFICATION CROSS-REFERENCE TABLE
+================================================================================
+
+| Code Section            | Primary Spec      | Section        |
+|-------------------------|-------------------|----------------|
+| DiameterResultCode      | TS 29.229         | 7              |
+| UserAuthorizationType   | TS 29.229         | 6.3.24         |
+| ServerCapabilities      | TS 29.229         | 6.3.4          |
+| ScscfPool               | TS 24.229         | 5.3.1.3        |
+| send_uar_to_hss         | TS 29.228         | 6.1            |
+| send_lir_to_hss         | TS 29.228         | 6.2            |
+| handle_register         | TS 24.229         | 5.3.1          |
+| handle_invite           | TS 24.229         | 5.3.2          |
+
+
+================================================================================
+KAMAILIO SOURCE MAPPING
+================================================================================
+
+| Python Class/Function   | Kamailio File       | Function         |
+|-------------------------|---------------------|------------------|
+| ScscfPool               | scscf_list.c        | scscf_list_*     |
+| get_scscf_for_caps      | scscf_list.c        | I_scscf_select() |
+| send_uar_to_hss         | cxdx_uar.c          | I_perform_user_authorization_request() |
+| send_lir_to_hss         | cxdx_lir.c          | I_perform_location_information_request() |
+| handle_register         | Route[REGISTER]     | icscf.cfg        |
+| handle_invite           | Route[INVITE]       | icscf.cfg        |
+
+
+================================================================================
+                              END OF DOCUMENT
+================================================================================

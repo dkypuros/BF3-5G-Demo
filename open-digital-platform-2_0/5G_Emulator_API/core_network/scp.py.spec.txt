@@ -1,0 +1,271 @@
+================================================================================
+                    SPECIFICATION MAP: scp.py
+           Service Communication Proxy - Spec Reference Bridge
+================================================================================
+
+Source File: 5G_Emulator_API/core_network/scp.py
+Generated:   2026-01-10
+Lines:       610
+Purpose:     Map each code section to governing 3GPP specifications
+Based On:    Open5GS SCP implementation
+
+================================================================================
+PRIMARY GOVERNING SPECIFICATIONS
+================================================================================
+
+3GPP TS 29.500 - Technical Realization of Service Based Architecture
+  Location: 90_Work-Telco/3GPP/Rel-19/29_series/
+  Scope: SCP functionality, indirect communication
+  Key Sections:
+    - Section 6.10: Service Communication Proxy
+    - Section 6.10.2: Indirect communication via SCP
+    - Section 6.10.3: SCP load balancing
+
+3GPP TS 23.501 - System Architecture for 5G System
+  Location: 90_Work-Telco/3GPP/Rel-19/23_series/
+  Scope: SBA architecture
+  Key Sections:
+    - Section 7.1: Service Based Architecture
+
+3GPP TS 29.510 - NRF NF Management Service
+  Location: 90_Work-Telco/3GPP/Rel-19/29_series/
+  Scope: NF registration and discovery
+
+
+================================================================================
+LINE-BY-LINE SPECIFICATION MAPPING
+================================================================================
+
+
+LINES 1-35: MODULE HEADER AND IMPORTS
+--------------------------------------------------------------------------------
+
+Lines 1-5: Module Documentation
+  Reference: Open5GS SCP
+  3GPP Specs: TS 29.500
+
+Lines 7-25: Imports
+  - FastAPI: HTTP API framework
+  - httpx: Async HTTP client for forwarding
+  - OpenTelemetry: Distributed tracing
+
+
+LINES 36-96: DATA MODELS
+--------------------------------------------------------------------------------
+
+Lines 38-43: class RoutingPreference(Enum)
+  Spec: TS 29.500 Section 6.10.3 - Load balancing
+
+  Routing preferences:
+    - ROUND_ROBIN: Cyclic selection
+    - LEAST_LOAD: Select least loaded NF
+    - PRIORITY: Select by priority
+    - RANDOM: Random selection
+
+Lines 44-58: class NfType(Enum)
+  Spec: TS 29.510 - NF types
+
+Lines 59-70: class NfInstance
+  Spec: TS 29.510 Section 6.1.6.2.2 - NFProfile (simplified)
+
+  Key attributes:
+    - nfInstanceId: NF instance UUID
+    - nfType: Type of NF
+    - nfStatus: REGISTERED status
+    - priority: Selection priority (lower = higher)
+    - capacity: NF capacity
+    - load: Current load
+
+Lines 71-80: class RoutingBinding
+  Spec: TS 29.500 Section 6.10.3.2 - Binding indication
+
+  Used for session affinity (sticky routing)
+
+Lines 81-89: class SCPConfig
+  SCP operational configuration:
+    - defaultRoutingPreference: Load balancing algorithm
+    - retryEnabled/maxRetries: Retry configuration
+    - circuitBreakerEnabled: Circuit breaker settings
+
+
+LINES 90-96: SCP STORAGE
+--------------------------------------------------------------------------------
+
+Lines 91-96: Storage structures
+
+  - nf_instance_cache: Cached NF instances
+  - nf_type_index: NF type to instance mapping
+  - routing_bindings: Session bindings
+  - round_robin_counters: RR state per NF type
+  - circuit_breaker_state: CB state per NF
+
+
+LINES 98-333: SCP CLASS
+--------------------------------------------------------------------------------
+
+Lines 98-114: class SCP.__init__ and HTTP client
+  Initializes SCP with async HTTP client
+
+Lines 115-136: register_nf_instance() / deregister_nf_instance()
+  Spec: TS 29.500 Section 6.10.2.2 - NF instance caching
+
+  SCP caches NF instances discovered from NRF
+
+Lines 138-189: select_nf_instance()
+  Spec: TS 29.500 Section 6.10.3 - Load balancing
+
+  Selection algorithm per TS 29.500:
+    1. Get candidates for target NF type
+    2. Filter by status (REGISTERED only)
+    3. Check circuit breaker state
+    4. Filter by service availability
+    5. Apply routing preference algorithm
+
+Lines 190-204: Load Balancing Algorithms
+  Spec: TS 29.500 Section 6.10.3.1
+
+  _select_round_robin(): Cyclic selection
+  _select_least_load(): Minimum load selection
+  _select_priority(): Priority-based selection
+
+Lines 205-243: Circuit Breaker
+  Spec: TS 29.500 (implied for reliability)
+
+  _is_circuit_open(): Check if CB is open
+  record_failure(): Track failures, open CB if threshold exceeded
+  record_success(): Reset failure count
+
+Lines 244-313: forward_request()
+  Spec: TS 29.500 Section 6.10.2 - Indirect communication
+
+  Request forwarding with:
+    1. NF instance selection
+    2. Target URL construction
+    3. Request forwarding with retry
+    4. Circuit breaker integration
+
+Lines 314-333: Routing Binding Management
+  Spec: TS 29.500 Section 6.10.3.2
+
+  create_routing_binding(): Create session binding
+  get_routing_binding(): Retrieve binding
+  delete_routing_binding(): Remove binding
+
+
+LINES 338-385: NRF REGISTRATION AND DISCOVERY
+--------------------------------------------------------------------------------
+
+Lines 338-385: lifespan() - Startup/Shutdown
+  Spec: TS 29.510 - Nnrf_NFManagement service
+
+  NF Profile per TS 29.510:
+    - nfServices: scp-routing
+    - scpInfo: SCP domain, prefix
+
+Lines 387-431: discover_nf_instances()
+  Spec: TS 29.510 Section 5.3 - Nnrf_NFDiscovery
+
+  Discovers and caches all NF instances from NRF
+
+
+LINES 451-502: SCP PROXY ENDPOINT
+--------------------------------------------------------------------------------
+
+Lines 453-502: scp_proxy()
+  Spec: TS 29.500 Section 6.10.2.2 - Indirect communication
+
+  API: /{method} /scp/{target_nf_type}/{path}
+
+  SBI Headers per TS 29.500:
+    - 3gpp-Sbi-Routing-Binding: Session binding ID
+    - 3gpp-Sbi-Target-apiRoot: Target API root
+
+  Procedure:
+    1. Receive request from NF consumer
+    2. Parse target NF type and path
+    3. Select target NF instance
+    4. Forward request
+    5. Return response to consumer
+
+
+LINES 504-576: SCP MANAGEMENT ENDPOINTS
+--------------------------------------------------------------------------------
+
+Lines 506-517: NF instance management
+  - POST /scp/nf-instances: Manual NF registration
+  - DELETE /scp/nf-instances/{nfInstanceId}: Deregister
+
+Lines 520-529: list_cached_nf_instances()
+  List all cached NF instances, optionally by type
+
+Lines 532-554: Routing binding management
+  - POST /scp/routing-bindings: Create binding
+  - GET /scp/routing-bindings/{bindingId}: Get binding
+  - DELETE /scp/routing-bindings/{bindingId}: Delete binding
+
+Lines 556-576: SCP configuration management
+  - POST /scp/refresh-cache: Refresh from NRF
+  - GET /scp/config: Get SCP config
+  - PATCH /scp/config: Update SCP config
+
+
+LINES 578-610: HEALTH AND METRICS
+--------------------------------------------------------------------------------
+
+Lines 580-605: Health and metrics
+  Returns:
+    - Cached NF instances count
+    - NF instances by type
+    - Routing bindings count
+    - Open circuit breakers count
+
+
+================================================================================
+SPECIFICATION CROSS-REFERENCE TABLE
+================================================================================
+
+| Code Section           | Primary Spec | Section        |
+|------------------------|--------------|----------------|
+| RoutingPreference      | TS 29.500    | 6.10.3         |
+| NfInstance (cache)     | TS 29.510    | 6.1.6.2.2      |
+| RoutingBinding         | TS 29.500    | 6.10.3.2       |
+| select_nf_instance     | TS 29.500    | 6.10.3         |
+| forward_request        | TS 29.500    | 6.10.2         |
+| scp_proxy              | TS 29.500    | 6.10.2.2       |
+| NRF registration       | TS 29.510    | 5.2.2.2        |
+| NRF discovery          | TS 29.510    | 5.3            |
+
+
+================================================================================
+SCP COMMUNICATION MODELS (TS 29.500)
+================================================================================
+
+Direct Communication:
+  NF Consumer -> NF Producer (no SCP)
+
+Indirect Communication via SCP:
+  Model A: NF Consumer -> SCP -> NF Producer
+  Model B: NF Consumer -> SCP -> ... -> SCP -> NF Producer
+
+SCP Benefits:
+  - Centralized load balancing
+  - Topology hiding
+  - Monitoring and logging
+  - Circuit breaker protection
+  - Session affinity support
+
+
+================================================================================
+SCP INTERFACE MAPPING
+================================================================================
+
+| Interface | Connected NF | Service              | Purpose              |
+|-----------|--------------|----------------------|----------------------|
+| SBI       | All NFs      | Indirect Communication| Request forwarding  |
+| Nnrf      | NRF          | Nnrf_NFDiscovery     | NF discovery         |
+| Nnrf      | NRF          | Nnrf_NFManagement    | NF registration      |
+
+
+================================================================================
+                              END OF DOCUMENT
+================================================================================

@@ -1,0 +1,248 @@
+================================================================================
+                    SPECIFICATION MAP: sgw.py
+           Serving Gateway - Spec Reference Bridge
+================================================================================
+
+Source File: 5G_Emulator_API/core_network/sgw.py
+Generated:   2026-01-10
+Lines:       642
+Purpose:     Map each code section to governing 3GPP specifications
+Based On:    Open5GS SGW-C/SGW-U implementation
+
+================================================================================
+PRIMARY GOVERNING SPECIFICATIONS
+================================================================================
+
+3GPP TS 23.401 - GPRS Enhancements for E-UTRAN Access
+  Location: 90_Work-Telco/3GPP/Rel-19/23_series/
+  Scope: SGW functional description
+  Key Sections:
+    - Section 4.4.3.2: SGW function
+    - Section 5.4: EPS bearer procedures
+
+3GPP TS 29.274 - GTPv2-C Protocol
+  Location: 90_Work-Telco/3GPP/Rel-19/29_series/
+  Scope: S11 and S5/S8 control plane
+  Key Sections:
+    - Section 7: GTPv2-C messages
+    - Section 8: Information Elements
+
+3GPP TS 29.281 - GTP-U Protocol
+  Location: 90_Work-Telco/3GPP/Rel-19/29_series/
+  Scope: User plane tunneling
+
+
+================================================================================
+LINE-BY-LINE SPECIFICATION MAPPING
+================================================================================
+
+
+LINES 1-34: MODULE HEADER AND IMPORTS
+--------------------------------------------------------------------------------
+
+Lines 1-5: Module Documentation
+  Reference: Open5GS SGW-C/SGW-U
+  3GPP Specs: TS 23.401
+
+
+LINES 35-154: DATA MODELS
+--------------------------------------------------------------------------------
+
+Lines 39-44: class BearerState(Enum)
+  Spec: TS 23.401 Section 5.4 - Bearer states
+
+Lines 45-50: class GtpTunnel
+  Spec: TS 29.281 - GTP-U tunnel endpoint
+
+  Contains:
+    - TEID: Tunnel Endpoint ID
+    - IP address
+    - Port (2152 default)
+
+Lines 51-78: class SgwBearer
+  Spec: TS 23.401 Section 5.4.1 - Bearer context
+
+  SGW bearer contains:
+    - S1-U tunnels (eNB <-> SGW)
+    - S5/S8 tunnels (SGW <-> PGW)
+    - QoS parameters
+    - Traffic counters
+
+Lines 79-95: class SgwSession
+  Spec: TS 23.401 - PDN connection at SGW
+
+  Session contains:
+    - S11 TEIDs (MME <-> SGW control)
+    - S5/S8 TEIDs (SGW <-> PGW control)
+    - Bearer list
+
+Lines 96-117: class SgwUeContext
+  Spec: TS 23.401 - UE context at SGW
+
+  Contains:
+    - Subscriber identifiers
+    - MME information
+    - Session list
+    - Location info
+
+Lines 118-154: Request/Response Models
+  Spec: TS 29.274 - GTPv2-C message structures
+
+  CreateSessionRequest: Maps to Create Session Request message
+  ModifyBearerRequest: Maps to Modify Bearer Request message
+  DeleteSessionRequest: Maps to Delete Session Request message
+
+
+LINES 155-217: SGW CONTEXT MANAGER
+--------------------------------------------------------------------------------
+
+Lines 159-189: class SgwContext.__init__
+  Spec: TS 23.401 Section 4.4.3.2 - SGW functions
+
+  Configuration:
+    - SGW ID and name
+    - SGW IP address
+    - PGW pool configuration
+    - Statistics tracking
+
+Lines 191-213: Helper methods
+  - allocate_teid(): TEID allocation
+  - find_ue_by_imsi(): UE lookup
+  - find_session_by_s11_teid(): Session lookup
+  - select_pgw(): PGW selection for APN
+
+
+LINES 218-243: HEALTH AND CONFIGURATION
+--------------------------------------------------------------------------------
+
+Lines 223-243: Health and configuration endpoints
+
+
+LINES 244-444: S11 INTERFACE (MME <-> SGW)
+--------------------------------------------------------------------------------
+
+Lines 248-339: create_session()
+  Spec: TS 29.274 Section 7.2.1 - Create Session Request
+
+  Procedure per TS 29.274:
+    1. Find/create UE context
+    2. Select PGW for APN
+    3. Create session with S11 TEIDs
+    4. Create bearers with:
+       - S1-U tunnel (SGW side)
+       - S5 tunnel (SGW side)
+       - Simulated PGW response
+    5. Return Create Session Response
+
+  GTPv2-C IEs included:
+    - Cause
+    - S11 SGW TEID
+    - S5/S8 PGW TEID
+    - Bearer Contexts
+
+Lines 341-388: modify_bearer()
+  Spec: TS 29.274 Section 7.2.7 - Modify Bearer Request
+
+  Updates S1-U tunnel endpoint after Initial Context Setup
+  Called when eNB provides its S1-U TEID
+
+Lines 390-420: delete_session()
+  Spec: TS 29.274 Section 7.2.9 - Delete Session Request
+
+  Cleans up:
+    - Bearer contexts
+    - Session
+    - UE context if no sessions remain
+
+Lines 422-443: release_access_bearers()
+  Spec: TS 29.274 Section 7.2.21 - Release Access Bearers
+
+  Called when UE moves to IDLE:
+    - Releases S1-U tunnels
+    - Maintains S5/S8 tunnels
+
+
+LINES 445-501: S5/S8 INTERFACE (SGW <-> PGW)
+--------------------------------------------------------------------------------
+
+Lines 449-501: create_dedicated_bearer()
+  Spec: TS 29.274 Section 7.2.3 - Create Bearer Request
+
+  PGW-initiated dedicated bearer:
+    1. Find linked bearer
+    2. Allocate new EBI
+    3. Create bearer with tunnels
+    4. Forward to MME
+
+
+LINES 503-559: USER PLANE MANAGEMENT
+--------------------------------------------------------------------------------
+
+Lines 507-533: downlink_data_notification()
+  Spec: TS 29.274 Section 7.2.11 - Downlink Data Notification
+
+  Triggered when:
+    - Data arrives for IDLE UE
+    - S1-U not established
+    - Initiates paging
+
+Lines 535-559: report_traffic()
+  Traffic statistics reporting per bearer
+
+
+LINES 561-626: CONTEXT MANAGEMENT
+--------------------------------------------------------------------------------
+
+Lines 565-615: Session listing and detail endpoints
+
+Lines 617-626: get_statistics()
+  Returns SGW procedure counts
+
+
+================================================================================
+SPECIFICATION CROSS-REFERENCE TABLE
+================================================================================
+
+| Code Section              | Primary Spec | Section        |
+|---------------------------|--------------|----------------|
+| GtpTunnel                 | TS 29.281    | 5              |
+| SgwBearer                 | TS 23.401    | 5.4.1          |
+| SgwSession                | TS 23.401    | 5.4            |
+| create_session            | TS 29.274    | 7.2.1          |
+| modify_bearer             | TS 29.274    | 7.2.7          |
+| delete_session            | TS 29.274    | 7.2.9          |
+| release_access_bearers    | TS 29.274    | 7.2.21         |
+| create_dedicated_bearer   | TS 29.274    | 7.2.3          |
+| downlink_data_notification| TS 29.274    | 7.2.11         |
+
+
+================================================================================
+SGW DATA PATH (TS 23.401)
+================================================================================
+
+                 S1-U                      S5/S8
+    eNB <===================> SGW <===================> PGW
+         GTP-U Tunnel              GTP-U Tunnel
+
+    UE --- Radio --- eNB --- S1-U --- SGW --- S5 --- PGW --- Internet
+
+Control Plane:
+    MME <--- S11 (GTPv2-C) ---> SGW <--- S5-C (GTPv2-C) ---> PGW
+
+
+================================================================================
+SGW INTERFACE MAPPING
+================================================================================
+
+| Interface | Connected NF | Protocol | Purpose                    |
+|-----------|--------------|----------|----------------------------|
+| S11       | MME          | GTPv2-C  | Session management         |
+| S1-U      | eNB          | GTP-U    | User plane to eNB          |
+| S5/S8-C   | PGW          | GTPv2-C  | Session management         |
+| S5/S8-U   | PGW          | GTP-U    | User plane to PGW          |
+| S4        | SGSN         | GTPv2-C  | 2G/3G interworking         |
+
+
+================================================================================
+                              END OF DOCUMENT
+================================================================================

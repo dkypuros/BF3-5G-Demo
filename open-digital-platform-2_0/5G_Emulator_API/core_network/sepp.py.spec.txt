@@ -1,0 +1,331 @@
+================================================================================
+                    SPECIFICATION MAP: sepp.py
+           Security Edge Protection Proxy - Spec Reference Bridge
+================================================================================
+
+Source File: 5G_Emulator_API/core_network/sepp.py
+Generated:   2026-01-10
+Lines:       708
+Purpose:     Map each code section to governing 3GPP specifications
+Based On:    Open5GS SEPP implementation
+
+================================================================================
+PRIMARY GOVERNING SPECIFICATIONS
+================================================================================
+
+3GPP TS 29.573 - 5G System; Public Land Mobile Network Interconnect
+  Location: 90_Work-Telco/3GPP/Rel-19/29_series/
+  Scope: N32-c and N32-f interfaces for inter-PLMN security
+  Key Sections:
+    - Section 5.2: N32-c procedures (Security Capability Negotiation)
+    - Section 5.3: N32-f procedures (Forwarding with Protection)
+    - Section 6.1: N32-c API definitions
+    - Section 6.2: N32-f API definitions
+
+3GPP TS 33.501 - Security Architecture for 5G System
+  Location: 90_Work-Telco/3GPP/Rel-19/33_series/
+  Scope: Inter-PLMN security requirements
+  Key Sections:
+    - Section 13: Inter-PLMN security
+
+3GPP TS 29.500 - Technical Realization of Service Based Architecture
+  Location: 90_Work-Telco/3GPP/Rel-19/29_series/
+  Scope: SEPP role in SBA
+
+
+================================================================================
+LINE-BY-LINE SPECIFICATION MAPPING
+================================================================================
+
+
+LINES 1-37: MODULE HEADER AND IMPORTS
+--------------------------------------------------------------------------------
+
+Lines 1-4: Module Documentation
+  Reference: Open5GS SEPP
+  3GPP Specs: TS 29.573
+
+Lines 6-28: Imports
+  - FastAPI: HTTP API framework
+  - cryptography: For PRINS protection
+  - httpx: Async HTTP client
+  - OpenTelemetry: Distributed tracing
+
+
+LINES 39-150: DATA MODELS
+--------------------------------------------------------------------------------
+
+Lines 41-45: class SecurityCapability(Enum)
+  Spec: TS 29.573 Section 6.1.6.3.2 - SecNegotiateReqData
+
+  Capabilities per TS 29.573:
+    - TLS: Transport Layer Security only
+    - PRINS: Protocol for N32 Interconnect Security
+    - NONE: No additional protection (not recommended)
+
+Lines 46-50: class N32Purpose(Enum)
+  Spec: TS 29.573 - N32 connection purpose
+
+  Purposes:
+    - ROAMING: Roaming interconnect
+    - INTER_PLMN: General inter-PLMN
+    - HOME_ROUTING: Home-routed roaming
+
+Lines 51-56: class ProtectionPolicy(Enum)
+  Spec: TS 29.573 Section 6.1.6.3.4 - ProtectionPolicy
+
+  Policies:
+    - FULL_PROTECTION: Integrity + Confidentiality
+    - MODIFICATION_PROTECTION: Integrity only
+    - CONFIDENTIALITY_PROTECTION: Encryption only
+    - NO_PROTECTION: No protection
+
+Lines 57-67: class IeType, IeLocation(Enum)
+  Spec: TS 29.573 Section 6.1.6.3 - IE protection granularity
+
+Lines 68-82: class PlmnId, N32Peer
+  Spec: TS 29.573 Section 6.1.6.2.2 - N32 peer information
+
+  N32Peer contains:
+    - peerPlmnId: Partner PLMN ID
+    - seppId: Peer SEPP identifier
+    - seppFqdn/seppIpAddress: Connectivity info
+    - securityCapability: Negotiated security
+    - n32Purpose: Connection purpose
+
+Lines 83-91: class N32Handshake
+  Spec: TS 29.573 Section 6.1.6.2.3 - SecNegotiateReqData
+
+  Handshake parameters:
+    - senderSeppId/receiverSeppId: SEPP identifiers
+    - secCapNegotiation: Offered capabilities
+    - selectedSecCapability: Selected capability
+
+Lines 92-104: class ProtectionPolicyInfo, IeInfo
+  Spec: TS 29.573 Section 6.1.6.2.4 - Protection policy
+
+Lines 105-120: class DataToIntegrityProtect, N32fReformattedReq/Rsp
+  Spec: TS 29.573 Section 6.2.6.2 - N32-f data structures
+
+  For PRINS protection:
+    - reformattedData: Base64 encoded SBI message
+    - integrityProtectedData: Hash and signature
+    - confidentialData: Encrypted portions
+
+Lines 122-132: class RoamingPartner
+  Purpose: Roaming partner configuration
+
+  Contains:
+    - Partner identification
+    - Trust level
+    - Allowed/blocked services
+    - Protection policy
+
+Lines 133-142: class MessageFilterRule
+  Purpose: Message filtering configuration
+
+  Filter criteria:
+    - Direction (INBOUND/OUTBOUND/BOTH)
+    - Action (ALLOW/BLOCK/MODIFY)
+    - NF type, service name, API prefix
+
+
+LINES 143-150: SEPP STORAGE
+--------------------------------------------------------------------------------
+
+Lines 144-150: Storage structures
+
+  - n32_peers: Active N32 peer connections
+  - roaming_partners: Configured partners
+  - n32f_contexts: N32-f message contexts
+  - message_filter_rules: Filtering rules
+  - active_connections: Connection state
+
+
+LINES 152-392: SEPP CLASS
+--------------------------------------------------------------------------------
+
+Lines 152-202: class SEPP.__init__ and _init_default_config()
+  Initializes SEPP with default protection policy and filter rules
+
+  Default filter rules:
+    - Allow NRF discovery
+    - Allow UDM SDM service
+    - Allow AUSF auth service
+    - Block internal APIs
+
+Lines 203-212: HTTP client management
+  Async client for inter-SEPP communication
+
+Lines 213-228: register_roaming_partner() / get_roaming_partner()
+  Roaming partner management
+
+Lines 229-277: establish_n32_connection()
+  Spec: TS 29.573 Section 5.2.2 - N32-c handshake
+
+  Procedure per TS 29.573:
+    1. Negotiate security capability
+    2. Select TLS or PRINS
+    3. Create N32 peer entry
+    4. Create connection context
+    5. Return handshake response
+
+Lines 278-306: apply_message_filter()
+  Message filtering based on configured rules
+
+  Returns (allowed, reason)
+
+Lines 307-351: protect_message() / verify_message()
+  Spec: TS 29.573 Section 5.3 - PRINS protection
+
+  protect_message():
+    - Calculate integrity hash (SHA-256)
+    - Optionally encrypt (for FULL_PROTECTION)
+
+  verify_message():
+    - Verify integrity hash
+    - Decrypt if needed
+
+Lines 353-392: forward_to_peer()
+  Forward request to peer SEPP with protection
+
+
+LINES 397-450: NRF REGISTRATION
+--------------------------------------------------------------------------------
+
+Lines 397-450: lifespan() - Startup/Shutdown
+  Spec: TS 29.510 - Nnrf_NFManagement service
+
+  NF Profile per TS 29.510:
+    - nfServices: n32-c, n32-f
+    - seppInfo: SEPP ID, prefix, remote PLMN list
+
+
+LINES 469-558: N32-C INTERFACE
+--------------------------------------------------------------------------------
+
+Lines 471-489: negotiate_security_capability()
+  Spec: TS 29.573 Section 5.2.2.2 - Security Capability Negotiation
+  Service: N32-c
+  Operation: SecNegotiate
+
+  API: POST /n32c-handshake/v1/security-capability-negotiation
+
+  Initiates N32-c handshake with peer SEPP
+
+Lines 491-501: terminate_security_capability()
+  Spec: TS 29.573 Section 5.2.3 - Connection Termination
+
+  API: POST /n32c-handshake/v1/security-capability-termination
+
+
+LINES 503-567: N32-F INTERFACE
+--------------------------------------------------------------------------------
+
+Lines 505-558: n32f_forward_request()
+  Spec: TS 29.573 Section 5.3.2 - N32-f Forward
+  Service: N32-f
+  Operation: N32fProcess
+
+  API: POST /n32f-forward/v1/n32f-process
+
+  Procedure:
+    1. Verify integrity protection
+    2. Decode reformatted data
+    3. Apply message filtering
+    4. Store context for response
+
+Lines 560-567: n32f_error_report()
+  Spec: TS 29.573 Section 5.3.3 - Error handling
+
+  API: POST /n32f-forward/v1/n32f-error
+
+
+LINES 569-660: ROAMING PARTNER MANAGEMENT
+--------------------------------------------------------------------------------
+
+Lines 571-611: Roaming partner CRUD
+  - POST /sepp/roaming-partners: Add partner
+  - GET /sepp/roaming-partners: List partners
+  - GET /sepp/roaming-partners/{id}: Get partner
+  - DELETE /sepp/roaming-partners/{id}: Remove partner
+
+Lines 613-636: N32 peer management
+  - GET /sepp/n32-peers: List N32 peers
+  - GET /sepp/active-connections: List active connections
+
+Lines 638-660: Filter rules management
+  - GET /sepp/filter-rules: List rules
+  - POST /sepp/filter-rules: Add rule
+  - DELETE /sepp/filter-rules/{id}: Remove rule
+
+
+LINES 662-708: PROTECTION POLICY AND HEALTH
+--------------------------------------------------------------------------------
+
+Lines 664-675: Protection policy management
+  - GET /sepp/protection-policy: Get default policy
+  - PUT /sepp/protection-policy: Update policy
+
+Lines 679-703: Health and metrics
+  Returns:
+    - Active N32 peers
+    - Roaming partners count
+    - Active connections
+    - Filter rules count
+
+
+================================================================================
+SPECIFICATION CROSS-REFERENCE TABLE
+================================================================================
+
+| Code Section                  | Primary Spec | Section        |
+|-------------------------------|--------------|----------------|
+| SecurityCapability            | TS 29.573    | 6.1.6.3.2      |
+| ProtectionPolicy              | TS 29.573    | 6.1.6.3.4      |
+| N32Handshake                  | TS 29.573    | 6.1.6.2.3      |
+| N32fReformattedReq            | TS 29.573    | 6.2.6.2        |
+| establish_n32_connection      | TS 29.573    | 5.2.2          |
+| negotiate_security_capability | TS 29.573    | 5.2.2.2        |
+| n32f_forward_request          | TS 29.573    | 5.3.2          |
+| PRINS protection              | TS 29.573    | 5.3            |
+| NRF registration              | TS 29.510    | 5.2.2.2        |
+
+
+================================================================================
+N32 INTERFACE ARCHITECTURE (TS 29.573)
+================================================================================
+
+         PLMN A                              PLMN B
+    +-------------+                     +-------------+
+    |    NRF      |                     |    NRF      |
+    +------+------+                     +------+------+
+           |                                   |
+    +------+------+       N32-c         +------+------+
+    |    SEPP     |<===================>|    SEPP     |
+    |             |       N32-f         |             |
+    +------+------+<===================>+------+------+
+           |                                   |
+    +------+------+                     +------+------+
+    |  AMF/SMF    |                     |  UDM/AUSF   |
+    +-------------+                     +-------------+
+
+N32-c: Security capability negotiation (control plane)
+N32-f: Forwarding with protection (user plane)
+
+
+================================================================================
+PRINS PROTECTION MODES (TS 29.573)
+================================================================================
+
+| Mode                      | Integrity | Confidentiality | Use Case        |
+|---------------------------|-----------|-----------------|-----------------|
+| FULL_PROTECTION           | Yes       | Yes             | Sensitive data  |
+| MODIFICATION_PROTECTION   | Yes       | No              | Standard ops    |
+| CONFIDENTIALITY_PROTECTION| No        | Yes             | Privacy only    |
+| NO_PROTECTION             | No        | No              | Trusted network |
+
+
+================================================================================
+                              END OF DOCUMENT
+================================================================================

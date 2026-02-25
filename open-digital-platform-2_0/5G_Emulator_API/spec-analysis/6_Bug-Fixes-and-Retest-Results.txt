@@ -1,0 +1,264 @@
+================================================================================
+BUG FIXES AND RETEST RESULTS
+5G Emulator Lab - Specification Compliance Fixes
+================================================================================
+
+Date: 2026-01-06
+Previous Test: 5_Live-Spec-Compliance-Test-Results.txt
+Status: ALL CRITICAL ISSUES RESOLVED
+
+================================================================================
+ISSUES IDENTIFIED IN ORIGINAL COMPLIANCE TEST
+================================================================================
+
+Three critical issues were identified during the initial specification compliance
+testing that prevented full 3GPP compliance:
+
+1. UPF IPv6 Address Parsing Error
+   - Severity: CRITICAL (prevented UPF from starting)
+   - Specification: TS 29.244
+
+2. NRF OAuth2 Token Validation Failure
+   - Severity: HIGH (broke authenticated NRF operations)
+   - Specification: TS 29.510
+
+3. NG Setup Connection Failure
+   - Severity: HIGH (gNB could not connect to AMF)
+   - Specification: TS 38.413
+
+================================================================================
+FIX 1: UPF IPv6 ADDRESS PARSING ERROR
+================================================================================
+
+File: core_network/upf_enhanced.py
+Line: 272
+
+PROBLEM:
+--------
+The IPv6 address pool was defined with an invalid hexadecimal segment:
+
+    self.ipv6_pool = ipaddress.IPv6Network("2001:db8:5g::/48")
+
+The segment "5g" is not valid hexadecimal. IPv6 addresses only allow hex
+digits (0-9, a-f). This caused a Python ipaddress.AddressValueError on startup.
+
+Error message:
+    ipaddress.AddressValueError: Only hex digits permitted in '5g' in '2001:db8:5g::'
+
+FIX APPLIED:
+------------
+Changed to valid hexadecimal:
+
+    self.ipv6_pool = ipaddress.IPv6Network("2001:db8:5000::/48")
+
+VERIFICATION:
+-------------
+UPF now starts successfully and reports IPv6 support in health check:
+    {
+        "status": "healthy",
+        "service": "UPF-Enhanced",
+        "compliance": "3GPP TS 29.244, TS 29.281",
+        "features": ["IPv6", "Advanced QoS", "Real GTP-U"]
+    }
+
+================================================================================
+FIX 2: NRF OAUTH2 TOKEN VALIDATION FAILURE
+================================================================================
+
+File: core_network/nrf.py
+Lines: 33, 279
+
+PROBLEM (Part A - JWT Secret Key):
+----------------------------------
+The JWT secret key was generated randomly on each NRF startup:
+
+    JWT_SECRET_KEY = secrets.token_urlsafe(32)
+
+This caused all tokens issued before a restart to become invalid, since
+they were signed with a different key.
+
+FIX APPLIED (Part A):
+---------------------
+Changed to a static key for development/testing:
+
+    # Use a static key for development/testing to persist across restarts
+    JWT_SECRET_KEY = "5g-emulator-lab-development-secret-key-2024"
+
+Note: In production, this should use proper key management (e.g., environment
+variables, secrets manager, or key rotation service).
+
+PROBLEM (Part B - Audience Validation):
+---------------------------------------
+The JWT token was created with an audience claim ("aud": "nrf"), but the
+verification did not specify the expected audience:
+
+    payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+
+PyJWT requires audience validation when an "aud" claim is present in the token.
+
+Error message:
+    InvalidAudienceError: Invalid audience
+
+FIX APPLIED (Part B):
+---------------------
+Added audience parameter to jwt.decode():
+
+    payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM], audience="nrf")
+
+VERIFICATION:
+-------------
+OAuth2 token flow now works end-to-end:
+
+1. Token Generation:
+   POST /oauth2/token
+   Response: {"access_token": "eyJ...", "token_type": "bearer", "expires_in": 3600}
+
+2. Token Validation (NF Registration):
+   PUT /nnrf-nfm/v1/nf-instances/{id}
+   Authorization: Bearer <token>
+   Response: HTTP 200 OK with NFProfile
+
+================================================================================
+FIX 3: NG SETUP CONNECTION FAILURE
+================================================================================
+
+File: core_network/amf.py
+Lines: 347-512 (added in previous session)
+
+PROBLEM:
+--------
+The gNB could not establish an NG connection with the AMF because the AMF
+did not have NGAP endpoints to handle the NG Setup procedure defined in
+TS 38.413 Section 9.2.6.
+
+gNB status showed:
+    "amf_connected": false,
+    "ng_connection_established": false
+
+FIX APPLIED:
+------------
+Added three NGAP endpoints to AMF:
+
+1. POST /ngap/ng-setup
+   - Handles NG Setup Request from gNB (TS 38.413 Section 9.2.6.1)
+   - Extracts Global RAN Node ID, Supported TA List
+   - Returns NG Setup Response with AMF name, GUAMI, PLMN support
+
+2. POST /ngap/initial-ue-message
+   - Handles Initial UE Message (TS 38.413 Section 9.2.5.1)
+   - Generates AMF UE NGAP ID
+   - Creates UE context in AMF
+
+3. POST /ngap/uplink-nas-transport
+   - Handles Uplink NAS Transport (TS 38.413 Section 9.2.5.4)
+   - Processes NAS PDU from UE via gNB
+
+Also added "gNodeB" to NFType enum in NRF (nrf.py line 58) to allow
+gNB registration.
+
+VERIFICATION:
+-------------
+gNB now successfully connects to AMF:
+    {
+        "status": "operational",
+        "amf_connected": true,
+        "ng_connection_established": true,
+        "connected_ues": 0,
+        "served_cells": 1
+    }
+
+AMF shows connected gNB:
+    {
+        "status": "healthy",
+        "service": "AMF",
+        "compliance": "3GPP TS 29.518, TS 38.413",
+        "connected_gnbs": 1
+    }
+
+================================================================================
+COMPREHENSIVE RETEST RESULTS
+================================================================================
+
+All services were restarted and tested after applying fixes.
+
+SERVICE HEALTH STATUS:
+----------------------
+
+| Service | Port  | Status  | Compliance                    | Details              |
+|---------|-------|---------|-------------------------------|----------------------|
+| NRF     | 8000  | Healthy | TS 29.510                     | 4 NFs registered     |
+| AMF     | 9000  | Healthy | TS 29.518, TS 38.413          | 1 gNB connected      |
+| SMF     | 9001  | Healthy | TS 29.502                     | Running              |
+| UPF     | 9002  | Healthy | TS 29.244, TS 29.281          | IPv6, QoS, GTP-U     |
+| gNB     | 38412 | Healthy | TS 38.413                     | NG connection: true  |
+
+COMPLIANCE TESTS:
+-----------------
+
+| Test                          | Specification | Result  | Notes                    |
+|-------------------------------|---------------|---------|--------------------------|
+| OAuth2 Token Generation       | TS 29.510     | PASS    | JWT with correct claims  |
+| OAuth2 Token Validation       | TS 29.510     | PASS    | Audience validation OK   |
+| NF Registration with Auth     | TS 29.510     | PASS    | 201 Created              |
+| NG Setup Procedure            | TS 38.413     | PASS    | gNB-AMF connected        |
+| Initial UE Message            | TS 38.413     | PASS    | RAN-UE-NGAP-ID assigned  |
+| PFCP Session Establishment    | TS 29.244     | PASS    | IP allocated             |
+| UPF IPv6 Support              | TS 29.244     | PASS    | Pool configured          |
+
+================================================================================
+FILES MODIFIED
+================================================================================
+
+1. core_network/upf_enhanced.py
+   - Line 272: Fixed IPv6 address from "5g" to "5000"
+
+2. core_network/nrf.py
+   - Line 33: Changed JWT_SECRET_KEY to static value
+   - Line 279: Added audience="nrf" to jwt.decode()
+
+3. core_network/amf.py (previous session)
+   - Lines 347-512: Added NGAP endpoints
+   - Line 58 in nrf.py: Added GNODEB to NFType enum
+
+================================================================================
+RECOMMENDATIONS FOR PRODUCTION
+================================================================================
+
+1. JWT Secret Key Management
+   - Use environment variable: JWT_SECRET_KEY = os.environ.get("JWT_SECRET")
+   - Or use a secrets management service (AWS Secrets Manager, HashiCorp Vault)
+   - Implement key rotation
+
+2. IPv6 Address Pool
+   - Configure via environment variable or config file
+   - Use organization's allocated IPv6 prefix
+
+3. Additional NGAP Procedures
+   - Implement UE Context Release (procedure code 41)
+   - Implement Paging (procedure code 20)
+   - Implement Error Indication (procedure code 5)
+
+4. Deprecation Warnings
+   - Replace datetime.utcnow() with datetime.now(datetime.UTC)
+   - Replace datetime.utcfromtimestamp() with datetime.fromtimestamp(ts, datetime.UTC)
+
+================================================================================
+CONCLUSION
+================================================================================
+
+All three critical issues identified in the original compliance test have been
+successfully resolved:
+
+  1. UPF IPv6 Address Bug         -> FIXED (valid hex)
+  2. NRF OAuth2 Token Validation  -> FIXED (static key + audience)
+  3. NG Setup Connection          -> FIXED (NGAP endpoints added)
+
+The 5G Emulator Lab now demonstrates strong compliance with:
+  - 3GPP TS 29.510 (NRF) - OAuth2 and NF Management
+  - 3GPP TS 38.413 (NGAP) - gNB-AMF procedures
+  - 3GPP TS 29.244 (PFCP) - UPF session management
+  - 3GPP TS 29.518 (AMF) - Core AMF services
+
+================================================================================
+END OF BUG FIX DOCUMENTATION
+================================================================================

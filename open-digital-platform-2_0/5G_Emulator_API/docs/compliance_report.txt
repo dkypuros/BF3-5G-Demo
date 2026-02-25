@@ -1,0 +1,837 @@
+================================================================================
+                    5G EMULATOR API - PROTOCOL COMPLIANCE REPORT
+================================================================================
+
+Generated:   2026-01-11
+Based On:    Open5GS Implementation
+Scope:       3GPP Release 15/16 and ETSI Standards Compliance Assessment
+
+
+================================================================================
+EXECUTIVE SUMMARY
+================================================================================
+
+This report assesses the 5G Emulator API's compliance with 3GPP and ETSI
+specifications across network function categories including 5G Core (5GC),
+4G Evolved Packet Core (EPC), IP Multimedia Subsystem (IMS), and ETSI
+standards for edge computing, NFV, and automation.
+
+The implementation provides a functional simulation environment suitable for
+testing and demonstration purposes.
+
+  Category              Overall Compliance    Notes
+  --------------------  -------------------   ---------------------------------
+  5G Core NFs           Partial               Core SBI operations implemented;
+                                              advanced features simplified
+  4G EPC NFs            Partial               Key procedures implemented;
+                                              Diameter interface simulated
+  IMS NFs               Partial               Basic SIP handling;
+                                              Rx interface simulated
+  ETSI MEC              Partial               Edge computing APIs implemented;
+                                              subscriptions incomplete
+  ETSI NFV              Partial               VNF lifecycle implemented;
+                                              persistence missing
+  ETSI ZSM              Partial               Closed-loop automation;
+                                              basic OODA cycle
+
+
+================================================================================
+                            5G CORE NETWORK FUNCTIONS
+================================================================================
+
+
+COMPLIANCE SUMMARY TABLE
+--------------------------------------------------------------------------------
+
+  NF      Primary Spec   Implemented Operations              Compliance
+  ------  ------------   ---------------------------------   ----------
+  NRF     TS 29.510      NFRegister, NFUpdate, NFDeregister      85%
+                         NFStatusSubscribe, NFStatusNotify
+                         NFDiscover
+
+  AMF     TS 29.518      N1N2MessageTransfer, UEContextTransfer  75%
+                         RegistrationStatusUpdate
+                         Subscribe/Unsubscribe
+
+  SMF     TS 29.502      CreateSMContext, UpdateSMContext        70%
+                         ReleaseSMContext, StatusNotify
+
+  AUSF    TS 29.509      UEAuthentication, 5G-AKA                65%
+
+  UDM     TS 29.503      SDM Get, UECM Register/Deregister       70%
+                         GenerateAuthData
+
+
+NRF (NETWORK REPOSITORY FUNCTION)
+--------------------------------------------------------------------------------
+
+Governing Specification: 3GPP TS 29.510 - NRF Services
+
+Implemented Operations:
+
+  Operation             Spec Section   Status        Notes
+  --------------------  ------------   -----------   -------------------------
+  NFRegister            5.2.2.2        Implemented   PUT /nnrf-nfm/v1/nf-instances/{nfInstanceId}
+  NFUpdate              5.2.2.3        Implemented   PATCH /nnrf-nfm/v1/nf-instances/{nfInstanceId}
+  NFDeregister          5.2.2.5        Implemented   DELETE /nnrf-nfm/v1/nf-instances/{nfInstanceId}
+  NFStatusSubscribe     5.2.2.4        Implemented   POST /nnrf-nfm/v1/subscriptions
+  NFStatusNotify        5.2.2.6        Implemented   Callback mechanism
+  NFDiscover            5.2.3.2        Implemented   GET /nnrf-disc/v1/nf-instances
+
+Data Models (TS 29.510 Section 6):
+
+  Model              Status        Notes
+  -----------------  -----------   -------------------------------------------
+  NFProfile          Implemented   NfType, NfStatus, HeartBeatTimer, PlmnList
+  NFService          Implemented   ServiceName, ServiceInstanceId, Scheme
+  SubscriptionData   Implemented   NfStatusNotificationUri, SubscrCond
+  SearchResult       Implemented   ValidityPeriod, NfInstances list
+
+Gaps:
+  - OAuth2 access token management not implemented
+  - NF profile validation simplified
+  - Load balancing hints not fully implemented
+
+Compliance Rating: Partial (85%)
+
+
+AMF (ACCESS AND MOBILITY MANAGEMENT FUNCTION)
+--------------------------------------------------------------------------------
+
+Governing Specification: 3GPP TS 29.518 - AMF Services
+
+Implemented Operations:
+
+  Operation                 Spec Section   Status        Notes
+  ------------------------  ------------   -----------   ----------------------
+  N1N2MessageTransfer       5.2.2.3.1      Implemented   POST .../n1-n2-messages
+  UEContextTransfer         5.2.2.2.2      Implemented   POST .../transfer
+  RegistrationStatusUpdate  5.2.2.2.3      Implemented   POST .../registration-status-update
+  Subscribe (EventExposure) 5.3.2.2        Implemented   POST /namf-evts/v1/subscriptions
+  Unsubscribe               5.3.2.4        Implemented   DELETE .../subscriptions/{id}
+
+Registration Procedures (TS 24.501):
+
+  Procedure               Status        Notes
+  ----------------------  -----------   -----------------------------------
+  Initial Registration    Implemented   5G-GUTI assignment, security context
+  Mobility Registration   Implemented   TAI update handling
+  Periodic Registration   Implemented   Timer-based re-registration
+  Deregistration          Implemented   UE and network initiated
+
+Gaps:
+  - Slice-based registration (NSSAI selection) simplified
+  - Paging procedures not fully implemented
+  - NGAP message encoding/decoding simplified
+  - Emergency registration not implemented
+
+Compliance Rating: Partial (75%)
+
+
+SMF (SESSION MANAGEMENT FUNCTION)
+--------------------------------------------------------------------------------
+
+Governing Specification: 3GPP TS 29.502 - SMF Services
+
+Implemented Operations:
+
+  Operation          Spec Section   Status        Notes
+  -----------------  ------------   -----------   ----------------------------
+  CreateSMContext    5.2.2.2        Implemented   POST /nsmf-pdusession/v1/sm-contexts
+  UpdateSMContext    5.2.2.3        Implemented   POST .../sm-contexts/{ref}/modify
+  ReleaseSMContext   5.2.2.4        Implemented   POST .../sm-contexts/{ref}/release
+  StatusNotify       5.2.2.6        Implemented   Callback to AMF
+
+PDU Session Management:
+
+  Feature                     Status        Notes
+  --------------------------  -----------   ------------------------------
+  PDU Session Establishment   Implemented   IPv4/IPv6 address allocation
+  PDU Session Modification    Implemented   QoS update
+  PDU Session Release         Implemented   UE/network initiated
+  Session AMBR                Implemented   Aggregate bit rate enforcement
+
+Gaps:
+  - N4 interface to UPF simulated (not real PFCP)
+  - Advanced QoS flow management simplified
+  - Multiple PDN connections partially implemented
+  - Policy control integration (N7) simplified
+
+Compliance Rating: Partial (70%)
+
+
+AUSF (AUTHENTICATION SERVER FUNCTION)
+--------------------------------------------------------------------------------
+
+Governing Specification: 3GPP TS 29.509 - AUSF Services
+
+Implemented Operations:
+
+  Operation          Spec Section   Status        Notes
+  -----------------  ------------   -----------   ----------------------------
+  UEAuthentication   6.1.3.2        Implemented   POST /nausf-auth/v1/ue-authentications
+  5G-AKA             6.1.3.2.2      Implemented   Authentication vector generation
+  Confirmation       6.1.3.2.4      Implemented   PUT .../5g-aka-confirmation
+
+Authentication Procedures (TS 33.501):
+
+  Procedure          Status        Notes
+  -----------------  -----------   -------------------------------------------
+  5G-AKA             Implemented   RAND, AUTN, HXRES*, KAUSF generation
+  SUPI Concealment   Partial       Basic SUCI handling
+  Key Derivation     Implemented   KAUSF, KSEAF derivation
+
+Gaps:
+  - EAP-AKA' full flow not implemented
+  - Steering of Roaming (SoR) protection not implemented
+  - SUCI decryption simplified
+  - Re-synchronization procedure simplified
+
+Compliance Rating: Partial (65%)
+
+
+UDM (UNIFIED DATA MANAGEMENT)
+--------------------------------------------------------------------------------
+
+Governing Specification: 3GPP TS 29.503 - UDM Services
+
+Implemented Operations:
+
+  Operation           Spec Section   Status        Notes
+  ------------------  ------------   -----------   ---------------------------
+  SDM Get             5.2.2.2        Implemented   GET /nudm-sdm/v1/{supi}/...
+  UECM Registration   5.3.2.2        Implemented   PUT .../registrations/amf-3gpp-access
+  UECM Deregistration 5.3.2.3        Implemented   DELETE operations
+  GenerateAuthData    5.2.3.2        Implemented   POST .../generate-auth-data
+
+Subscription Data Management:
+
+  Data Type                           Status        Notes
+  ----------------------------------  -----------   -------------------------
+  Access and Mobility Subscription    Implemented   Gpsis, SubscribedUeAmbr
+  SMF Selection Subscription          Implemented   SubscribedSnssaiInfos
+  Session Management Subscription     Implemented   DnnConfigurations
+  Authentication Subscription         Implemented   AuthMethod, EncPermanentKey
+
+Gaps:
+  - Subscription modification (SDM Subscribe/Unsubscribe) simplified
+  - Policy data retrieval not fully implemented
+  - Trace data management not implemented
+  - SMS subscription data not implemented
+
+Compliance Rating: Partial (70%)
+
+
+================================================================================
+                        4G EVOLVED PACKET CORE (EPC)
+================================================================================
+
+
+COMPLIANCE SUMMARY TABLE
+--------------------------------------------------------------------------------
+
+  NF    Primary Spec           Implemented Operations              Compliance
+  ----  ---------------------  ---------------------------------   ----------
+  MME   TS 23.401, TS 24.301   Attach, Detach, TAU, Service Req        75%
+                               S1AP Setup, Handover
+
+  HSS   TS 29.272              AIR/AIA, ULR/ULA, PUR, CLR, IDR         80%
+
+
+MME (MOBILITY MANAGEMENT ENTITY)
+--------------------------------------------------------------------------------
+
+Governing Specifications:
+  - TS 23.401 - EPS Architecture
+  - TS 24.301 - NAS Protocol for EPS
+  - TS 36.413 - S1AP
+
+Implemented EMM Procedures (TS 24.301):
+
+  Procedure        Spec Section   Status        Notes
+  ---------------  ------------   -----------   ----------------------------
+  Attach           5.5.1          Implemented   EPS Attach, Combined Attach
+  Detach           5.5.2          Implemented   UE initiated, Network initiated
+  TAU              5.5.3          Implemented   Periodic, Normal, Combined
+  Service Request  5.6.1          Implemented   Data/signaling service
+  GUTI Realloc     5.4.1          Implemented   During attach/TAU
+  Authentication   5.4.2          Implemented   EPS AKA procedure
+
+S1AP Interface (TS 36.413):
+
+  Procedure               Status        Notes
+  ----------------------  -----------   ---------------------------------
+  S1 Setup                Implemented   eNB registration
+  Initial UE Message      Implemented   Attach trigger
+  Downlink NAS Transport  Implemented   NAS to UE
+  Uplink NAS Transport    Implemented   NAS from UE
+  Initial Context Setup   Implemented   Bearer establishment
+  UE Context Release      Implemented   Detach completion
+  Handover Required/Req   Implemented   S1 handover
+
+Gaps:
+  - Full NAS security mode (integrity/ciphering) simplified
+  - X2 handover not implemented
+  - Emergency attach simplified
+  - CS Fallback not implemented
+
+Compliance Rating: Partial (75%)
+
+
+HSS (HOME SUBSCRIBER SERVER)
+--------------------------------------------------------------------------------
+
+Governing Specifications:
+  - TS 29.272 - MME/SGSN Related Interfaces (Diameter S6a)
+  - TS 33.401 - EPS Security Architecture
+  - TS 35.206 - Milenage Algorithm
+
+Implemented S6a Operations (TS 29.272):
+
+  Operation   Spec Section   Status        Notes
+  ----------  ------------   -----------   -----------------------------------
+  AIR/AIA     5.2.3.1        Implemented   Authentication Information
+  ULR/ULA     5.2.1.1        Implemented   Update Location
+  PUR         5.2.2.1        Implemented   Purge UE
+  CLR         5.2.1.2        Implemented   Cancel Location
+  IDR         5.2.1.3        Implemented   Insert Subscriber Data
+
+Authentication (TS 33.401):
+
+  Component               Status        Notes
+  ----------------------  -----------   ---------------------------------
+  EPS AKA                 Implemented   Full authentication flow
+  Milenage f1-f5          Implemented   Simplified AES (not hardware)
+  KASME Derivation        Implemented   Per Annex A.2
+  Auth Vector Generation  Implemented   RAND, AUTN, XRES, KASME
+  SQN Management          Implemented   Sequence number tracking
+  Resynchronization       Implemented   AUTS handling
+
+Gaps:
+  - Real Diameter protocol stack not implemented (HTTP simulation)
+  - DSR (Delete Subscriber Data Request) not implemented
+  - RSR (Reset Request) not implemented
+  - Operator-Determined Barring simplified
+
+Compliance Rating: Partial (80%)
+
+
+================================================================================
+                        IMS (IP MULTIMEDIA SUBSYSTEM)
+================================================================================
+
+
+COMPLIANCE SUMMARY TABLE
+--------------------------------------------------------------------------------
+
+  NF       Primary Spec   Implemented Operations              Compliance
+  -------  ------------   ---------------------------------   ----------
+  P-CSCF   TS 24.229      REGISTER, INVITE, MESSAGE               60%
+                          IPSec (simulated), Rx (simulated)
+
+
+P-CSCF (PROXY CALL SESSION CONTROL FUNCTION)
+--------------------------------------------------------------------------------
+
+Governing Specifications:
+  - TS 24.229 - IMS Call Control
+  - TS 29.214 - Rx Interface (Policy/Charging Control)
+  - TS 33.203 - IMS Security
+
+Implemented SIP Procedures (TS 24.229):
+
+  Procedure        Spec Section   Status        Notes
+  ---------------  ------------   -----------   ----------------------------
+  REGISTER         5.1            Implemented   Initial/Re-registration
+  INVITE           5.1.3          Implemented   Session establishment
+  MESSAGE          5.6            Implemented   Instant messaging
+  De-registration  5.1.1.6        Implemented   Expires=0 handling
+
+Security (TS 33.203):
+
+  Feature                  Status      Notes
+  -----------------------  ----------  ------------------------------------
+  IPSec SA Setup           Simulated   Not real IPSec
+  Security-Client Header   Parsed      Algorithm negotiation
+  Security-Server Header   Generated   Response parameters
+  SPI Allocation           Implemented Local tracking
+
+Rx Interface (TS 29.214):
+
+  Operation   Status      Notes
+  ----------  ----------  -----------------------------------------
+  AAR/AAA     Simulated   Session authorization
+  STR/STA     Simulated   Session termination
+  RAR/RAA     Simulated   Re-authorization
+  ASR/ASA     Simulated   Abort session
+
+Gaps:
+  - Full SIP message parsing simplified (not RFC 3261 compliant parser)
+  - Real IPSec negotiation not implemented
+  - Real Diameter Rx stack not implemented (HTTP simulation)
+  - S-CSCF/I-CSCF interfaces not implemented
+  - SRTP media security not implemented
+
+Compliance Rating: Partial (60%)
+
+
+================================================================================
+                            ETSI STANDARDS
+================================================================================
+
+Beyond 3GPP, this platform implements ETSI standards for edge computing,
+network function virtualization, and zero-touch service management.
+
+
+COMPLIANCE SUMMARY TABLE
+--------------------------------------------------------------------------------
+
+  Component      Primary Spec      Lines   Port   Compliance
+  -------------  ----------------  ------  -----  ----------
+  MEC Platform   GS MEC 011           613   8090       85%
+  Location API   GS MEC 013           524   8091       80%
+  RNIS API       GS MEC 012           421   8092       85%
+  VNFM           GS NFV-SOL 003       532   8093       75%
+  Closed Loop    GS ZSM 002           529   8094       70%
+
+
+MEC PLATFORM (MULTI-ACCESS EDGE COMPUTING)
+--------------------------------------------------------------------------------
+
+Governing Specifications:
+  - ETSI GS MEC 003 - MEC Framework and Reference Architecture
+  - ETSI GS MEC 011 - MEC Platform Application Enablement
+
+Implemented Operations (Mp1 Interface):
+
+  Operation             Spec Section   Status        Notes
+  --------------------  ------------   -----------   -------------------------
+  RegisterService       8.2.2          Implemented   POST .../services
+  DiscoverServices      8.2.3          Implemented   GET /services with filters
+  GetService            8.2.4          Implemented   GET /services/{serviceId}
+  UpdateService         8.2.5          Implemented   PUT /services/{serviceId}
+  DeregisterService     8.2.6          Implemented   DELETE /services/{serviceId}
+  ConfirmReady          8.3.2          Implemented   POST .../confirm_ready
+  ConfirmTermination    8.3.3          Implemented   POST .../confirm_termination
+
+DNS and Traffic Rules:
+
+  Feature             Status        Notes
+  ------------------  -----------   -----------------------------------------
+  DNS Rule Mgmt       Implemented   GET/PUT .../dns_rules/{dnsRuleId}
+  Traffic Rule Mgmt   Implemented   GET/PUT .../traffic_rules/{trafficRuleId}
+  UPF Integration     Implemented   Notifies UPF of traffic steering rules
+
+Data Models:
+
+  Model           Status        Notes
+  --------------  -----------   -------------------------------------------
+  ServiceInfo     Implemented   serName, version, state, transportInfo
+  DnsRule         Implemented   domainName, ipAddress, ttl, state
+  TrafficRule     Implemented   filterType, priority, trafficFilter, action
+  MecAppInstance  Implemented   appInstanceId, appName, appProvider
+
+Gaps:
+  - Service subscriptions (8.4) not implemented - callbacks never triggered
+  - Timing/availability notifications missing
+  - OAuth2 authentication not implemented (per GS MEC 009)
+
+Compliance Rating: Partial (85%)
+
+
+LOCATION API
+--------------------------------------------------------------------------------
+
+Governing Specification: ETSI GS MEC 013 - Location API
+
+Implemented Operations:
+
+  Operation                Spec Section   Status        Notes
+  -----------------------  ------------   -----------   ----------------------
+  GetUsersLocation         6.2.2          Implemented   GET /queries/users
+  GetUserLocation          6.2.3          Implemented   GET /users/{userId}
+  GetZones                 6.3.2          Implemented   GET /zones
+  GetZoneInfo              6.3.3          Implemented   GET /zones/{zoneId}
+  GetAccessPoints          6.4.2          Implemented   GET .../accessPoints
+  GetAccessPointInfo       6.4.3          Implemented   GET .../accessPoints/{apId}
+  UserTrackingSubscribe    6.5.2          Partial       POST .../userTracking
+  ZonalTrafficSubscribe    6.6.2          Partial       POST .../zonalTraffic
+
+Integration Points:
+
+  Integration   Status        Notes
+  ------------  -----------   -------------------------------------------
+  AMF Query     Implemented   Queries AMF for UE context and location
+  Fallback      Implemented   Simulated locations when AMF unavailable
+  Sample Data   Implemented   3 cells in San Francisco area pre-loaded
+
+Data Models:
+
+  Model             Status        Notes
+  ----------------  -----------   -----------------------------------------
+  LocationInfo      Implemented   latitude, longitude, altitude, accuracy
+  TerminalLocation  Implemented   address, locationInfo, currentAccessPointId
+  AccessPointInfo   Implemented   accessPointId, locationInfo, numberOfUsers
+  ZoneInfo          Implemented   zoneId, numberOfAccessPoints, numberOfUsers
+
+Gaps:
+  - Subscription callbacks not triggered (webhook notifications missing)
+  - Distance criteria filtering not implemented
+  - Periodic notification not implemented
+
+Compliance Rating: Partial (80%)
+
+
+RNIS API (RADIO NETWORK INFORMATION SERVICE)
+--------------------------------------------------------------------------------
+
+Governing Specification: ETSI GS MEC 012 - Radio Network Information API
+
+Implemented Operations:
+
+  Operation           Spec Section   Status        Notes
+  ------------------  ------------   -----------   --------------------------
+  GetRabInfo          6.2.2          Implemented   GET /queries/rab_info
+  GetPlmnInfo         6.2.3          Implemented   GET /queries/plmn_info
+  GetL2Meas           6.2.4          Implemented   GET /queries/layer2_meas
+  GetCells            6.3.2          Implemented   GET /cells
+  GetCellInfo         6.3.3          Implemented   GET /cells/{cellId}
+  GetUeMeasurements   6.4.2          Implemented   GET /ue/{ueId}/measurements
+  Subscribe           6.5.2          Partial       POST /subscriptions
+
+Radio Measurements:
+
+  Measurement   Range            Status        Notes
+  ------------  ---------------  -----------   ----------------------------
+  RSRP          -156 to -44 dBm  Implemented   Reference Signal Received Power
+  RSRQ          -34 to 3 dB      Implemented   Reference Signal Received Quality
+  SINR          -23 to 40 dB     Implemented   Signal to Interference + Noise
+  PRB Usage     0-100%           Implemented   DL/UL GBR and non-GBR
+
+Integration Points:
+
+  Integration    Status        Notes
+  -------------  -----------   -----------------------------------------
+  gNodeB/CU      Implemented   Queries CU for radio measurements
+  Fallback       Implemented   Simulated measurements when CU unavailable
+  Sample Cells   Implemented   3 cells (100MHz, 100MHz, 50MHz)
+
+Gaps:
+  - Subscription callbacks not triggered
+  - Cell change notifications not implemented
+  - Measurement configuration not implemented
+
+Compliance Rating: Partial (85%)
+
+
+VNFM (VNF MANAGER)
+--------------------------------------------------------------------------------
+
+Governing Specification: ETSI GS NFV-SOL 003 - VNF Lifecycle Management Interface
+
+Implemented Operations:
+
+  Operation              Spec Section   Status        Notes
+  ---------------------  ------------   -----------   -------------------------
+  CreateVnfInstance      5.4.2          Implemented   POST /vnf_instances
+  QueryVnfInstance       5.4.3          Implemented   GET /vnf_instances/{id}
+  QueryVnfInstances      5.4.4          Implemented   GET /vnf_instances
+  DeleteVnfInstance      5.4.6          Implemented   DELETE /vnf_instances/{id}
+  InstantiateVnf         5.4.7          Implemented   POST .../instantiate (202)
+  TerminateVnf           5.4.8          Implemented   POST .../terminate (202)
+  QueryLcmOpOcc          5.4.12         Implemented   GET /vnf_lcm_op_occs/{id}
+  QueryLcmOpOccs         5.4.13         Implemented   GET /vnf_lcm_op_occs
+
+VNF Lifecycle States:
+
+  NOT_INSTANTIATED --[instantiate]--> INSTANTIATED --[terminate]--> NOT_INSTANTIATED
+         |
+         +--[delete]---> DELETED
+
+LCM Operation States:
+
+  STARTING --> PROCESSING --> COMPLETED
+                   |
+                   +-----> FAILED_TEMP
+                   |
+                   +-----> FAILED --> ROLLING_BACK --> ROLLED_BACK
+
+Pre-configured VNFD Catalog:
+
+  VNFD ID        Product   Version   Purpose
+  -------------  --------  --------  ---------------------------------
+  vnfd-amf-v1    AMF       1.0.0     Access & Mobility Management
+  vnfd-smf-v1    SMF       1.0.0     Session Management Function
+  vnfd-upf-v1    UPF       1.0.0     User Plane Function
+  vnfd-nrf-v1    NRF       1.0.0     Network Function Repository
+  vnfd-ausf-v1   AUSF      1.0.0     Authentication Server Function
+  vnfd-udm-v1    UDM       1.0.0     Unified Data Management
+  vnfd-pcf-v1    PCF       1.0.0     Policy Control Function
+
+Gaps:
+  - ScaleVnf operation not implemented
+  - HealVnf operation not implemented
+  - ModifyVnfInfo operation not implemented
+  - Grant interface (NFVO) not implemented
+  - Persistence layer missing - in-memory only
+  - LCM subscriptions not implemented
+
+Compliance Rating: Partial (75%)
+
+
+ZSM CLOSED LOOP ENGINE
+--------------------------------------------------------------------------------
+
+Governing Specification: ETSI GS ZSM 002 - ZSM Reference Architecture
+
+Implemented Operations:
+
+  Operation            Spec Section   Status        Notes
+  -------------------  ------------   -----------   --------------------------
+  CreateIntent         7.2            Implemented   POST /intents
+  QueryIntents         7.2            Implemented   GET /intents
+  QueryIntent          7.2            Implemented   GET /intents/{intentId}
+  CreateClosedLoop     7.3            Implemented   POST /closed-loops
+  QueryClosedLoops     7.3            Implemented   GET /closed-loops
+  StartClosedLoop      7.3            Implemented   POST .../start (202)
+  StopClosedLoop       7.3            Implemented   POST .../stop (202)
+  QueryObservations    7.4            Implemented   GET /observations
+  QueryAnalyses        7.4            Implemented   GET /analyses
+  QueryActions         7.4            Implemented   GET /actions
+
+Closed Loop Phases (OODA Cycle):
+
+  +------------------------------------------------------------------+
+  |                    CLOSED LOOP CYCLE                             |
+  +------------------------------------------------------------------+
+  |  1. OBSERVE                                                      |
+  |     - Query Prometheus for metrics                               |
+  |     - Metrics: amf_registered_ues, smf_sessions,                 |
+  |       upf_throughput, nf_response_time                           |
+  |                                                                  |
+  |  2. ANALYZE                                                      |
+  |     - Compare observations to intent constraints                 |
+  |     - Calculate deviation from targets                           |
+  |     - Generate assessment (NORMAL / THRESHOLD_EXCEEDED)          |
+  |                                                                  |
+  |  3. DECIDE                                                       |
+  |     - Check if recommendation exists                             |
+  |     - Determine action type based on intent                      |
+  |                                                                  |
+  |  4. ACT                                                          |
+  |     - Execute remediation action                                 |
+  |     - SCALE_OUT: Call VNFM to scale                              |
+  |     - Track action state and result                              |
+  |                                                                  |
+  |  [Wait observeInterval seconds, repeat]                          |
+  +------------------------------------------------------------------+
+
+Intent Types:
+
+  Type           Purpose
+  -------------  --------------------------------------------
+  ASSURANCE      Maintain service quality
+  OPTIMIZATION   Improve performance
+  HEALING        Auto-recovery from failures
+  SCALING        Dynamic scaling based on load
+
+Integration Points:
+
+  Integration    Status        Notes
+  -------------  -----------   -----------------------------------------
+  Prometheus     Implemented   Query metrics via /api/v1/query
+  VNFM           Implemented   Call scaling API for remediation
+  Fallback       Implemented   Simulated observations if Prometheus down
+
+Gaps:
+  - Intent conflict resolution not implemented
+  - Multi-domain coordination not implemented
+  - Policy-based decision making simplified
+  - Machine learning analysis not implemented
+  - Persistence layer missing - in-memory only
+
+Compliance Rating: Partial (70%)
+
+
+================================================================================
+                            GAP ANALYSIS SUMMARY
+================================================================================
+
+
+CRITICAL GAPS (AFFECTING CORE FUNCTIONALITY)
+--------------------------------------------------------------------------------
+
+  NF/Component   Gap                          Impact              Mitigation
+  -------------  ---------------------------  ------------------  ---------------
+  All 5G NFs     OAuth2 token validation      Security not        Intended for
+                                              production-ready    simulation
+
+  SMF            Real N4/PFCP to UPF          No actual data      Simulated
+                                              plane               responses
+
+  AUSF           EAP-AKA'                     Limited auth        5G-AKA sufficient
+                                              methods             for demo
+
+  HSS            Real Diameter stack          Protocol not        HTTP API
+                                              wire-compatible     simulation
+
+  P-CSCF         Real SIP parsing             May fail on         Basic SIP
+                                              complex messages    sufficient
+
+  All ETSI       No persistence               Data lost on        In-memory for
+                                              restart             demo
+
+  All ETSI       No authentication            Security risk       Intended for
+                                                                  simulation
+
+  MEC/RNIS       Subscription callbacks       Events not          Polling
+                 not triggered                delivered           available
+
+
+SIMPLIFIED IMPLEMENTATIONS (ACCEPTABLE FOR SIMULATION)
+--------------------------------------------------------------------------------
+
+  Area            Simplification                 Rationale
+  --------------  -----------------------------  ----------------------------
+  Milenage        Software AES vs hardware       Demo environment
+  NAS Security    Simplified encryption          Focus on procedure flow
+  QoS             Basic QCI mapping              No real traffic shaping
+  Timers          Relaxed timing                 Interactive testing
+  Tracing         OpenTelemetry spans            Enhanced observability
+  Traffic Rules   HTTP notification to UPF       No real N6 steering
+  Closed Loop     Fixed metrics set              Sufficient for demo
+
+
+NOT IMPLEMENTED (OUT OF SCOPE)
+--------------------------------------------------------------------------------
+
+  Feature                                    Reason
+  -----------------------------------------  --------------------------------
+  Real transport (SCTP, Diameter, SIP)       HTTP simulation intended
+  Hardware security modules                  Software-only implementation
+  Lawful interception                        Not applicable to simulator
+  Charging (Gy/Gz)                           Beyond demo scope
+  PCRF/PCF policy control                    Simplified policy
+  ETSI MEC OAuth2 (GS MEC 009)               Beyond demo scope
+  NFV NFVO/Grant interface                   Simplified orchestration
+  ZSM ML-based analysis                      Beyond demo scope
+
+
+================================================================================
+                        COMPLIANCE RATINGS SUMMARY
+================================================================================
+
+  Network Function   Category     Compliance   Rating
+  -----------------  -----------  ----------   ------
+  NRF                5G Core           85%     Partial
+  AMF                5G Core           75%     Partial
+  SMF                5G Core           70%     Partial
+  AUSF               5G Core           65%     Partial
+  UDM                5G Core           70%     Partial
+  MME                4G EPC            75%     Partial
+  HSS                4G EPC            80%     Partial
+  P-CSCF             IMS               60%     Partial
+  MEC Platform       ETSI MEC          85%     Partial
+  Location API       ETSI MEC          80%     Partial
+  RNIS API           ETSI MEC          85%     Partial
+  VNFM               ETSI NFV          75%     Partial
+  Closed Loop        ETSI ZSM          70%     Partial
+
+
+RATING DEFINITIONS
+--------------------------------------------------------------------------------
+
+  Rating               Range       Description
+  -------------------  ----------  ---------------------------------------------
+  Full                 90-100%     Complete specification compliance,
+                                   production-ready
+
+  Partial              50-89%      Core procedures implemented, suitable for
+                                   testing and demonstration
+
+  Stub                 0-49%       Minimal implementation, API scaffolding only
+
+
+================================================================================
+                            RECOMMENDATIONS
+================================================================================
+
+
+FOR PRODUCTION USE
+--------------------------------------------------------------------------------
+
+  1. Replace HTTP simulation with real protocol stacks (Diameter, SIP, NGAP)
+  2. Implement full OAuth2/TLS security across all components
+  3. Add comprehensive NAS security (integrity, ciphering)
+  4. Integrate with real UPF via PFCP
+  5. Add persistence layer (Redis/PostgreSQL) for ETSI components
+  6. Implement ETSI MEC OAuth2 per GS MEC 009
+  7. Add subscription/callback webhook implementations
+
+
+FOR ENHANCED TESTING
+--------------------------------------------------------------------------------
+
+  1. Add negative test scenarios (error codes, timeouts)
+  2. Implement procedure timing validation
+  3. Add message sequence validation
+  4. Enhance logging with 3GPP IE details
+  5. Add ETSI-specific test suites for MEC/NFV/ZSM
+
+
+FOR EXTENDED SIMULATION
+--------------------------------------------------------------------------------
+
+  1. Add PCRF/PCF for policy simulation
+  2. Implement charging simulation (Gy/Ro)
+  3. Add inter-PLMN roaming scenarios
+  4. Implement voice over NR (VoNR) flows
+  5. Add ETSI MEC application lifecycle scenarios
+  6. Implement multi-VNF orchestration via NFVO
+
+
+================================================================================
+                            REFERENCES
+================================================================================
+
+
+3GPP SPECIFICATIONS
+--------------------------------------------------------------------------------
+
+  Specification   Title                                    Version
+  --------------  ---------------------------------------  --------
+  TS 29.510       NRF Services                             Rel-15/16
+  TS 29.518       AMF Services                             Rel-15/16
+  TS 29.502       SMF Services                             Rel-15/16
+  TS 29.509       AUSF Services                            Rel-15/16
+  TS 29.503       UDM Services                             Rel-15/16
+  TS 23.401       EPS Architecture                         Rel-15
+  TS 24.301       NAS for EPS                              Rel-15
+  TS 29.272       Diameter S6a                             Rel-15
+  TS 33.401       EPS Security                             Rel-15
+  TS 35.206       Milenage Algorithm                       Rel-15
+  TS 24.229       IMS Call Control                         Rel-15
+  TS 29.214       Rx Interface                             Rel-15
+
+
+ETSI SPECIFICATIONS
+--------------------------------------------------------------------------------
+
+  Specification    Title                                   Version
+  ---------------  --------------------------------------  --------
+  GS MEC 003       MEC Framework and Reference Arch        v2.2.1
+  GS MEC 009       General Principles for MEC APIs         v2.2.1
+  GS MEC 011       MEC Platform Application Enablement     v2.2.1
+  GS MEC 012       Radio Network Information API           v2.2.1
+  GS MEC 013       Location API                            v3.1.1
+  GS NFV-SOL 003   VNF Lifecycle Management Interface      v1.4.1
+  GS ZSM 002       ZSM Reference Architecture              v1.0.1
+
+
+================================================================================
+                              END OF REPORT
+================================================================================
+
+Report generated for 5G Emulator API compliance assessment.
+Last updated: 2026-01-11
+

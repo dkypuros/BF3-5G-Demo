@@ -1,0 +1,7 @@
+# Test Requirements for 5G Emulator API
+# Install with: pip install -r tests/requirements-test.txt
+
+pytest>=7.4.0
+pytest-timeout>=2.2.0
+pytest-xdist>=3.5.0
+httpx>=0.26.0

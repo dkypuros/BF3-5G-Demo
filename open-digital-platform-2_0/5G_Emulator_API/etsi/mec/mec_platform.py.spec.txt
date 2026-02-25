@@ -1,0 +1,429 @@
+================================================================================
+                    SPECIFICATION MAP: mec_platform.py
+            MEC Platform - ETSI Spec Reference Bridge
+================================================================================
+
+Source File: 5G_Emulator_API/etsi/mec/mec_platform.py
+Generated:   2026-01-10
+Lines:       ~550
+Purpose:     Map each code section to governing ETSI MEC specifications
+
+
+================================================================================
+PRIMARY GOVERNING SPECIFICATIONS
+================================================================================
+
+ETSI GS MEC 003 - MEC Framework and Reference Architecture
+  Location: 90_Work-Telco/ETSI/MEC/gs_mec003v030101p.pdf
+  Scope: Defines MEC system architecture, reference points (Mp1, Mp2, Mp3)
+  Key Sections:
+    - Section 5: MEC system architecture
+    - Section 6: MEC reference points
+    - Section 7: MEC platform services
+
+ETSI GS MEC 011 - MEC Platform Application Enablement
+  Location: 90_Work-Telco/ETSI/MEC/gs_MEC011v020201p.pdf
+  OpenAPI: 90_Work-Telco/ETSI/forge/gs011-app-enablement-api/
+  Scope: Defines Mp1 interface for MEC service management
+  Key Sections:
+    - Section 7: API definition
+    - Section 8: Data model
+
+ETSI GS MEC 009 - General Principles for MEC Service APIs
+  Location: 90_Work-Telco/ETSI/MEC/gs_MEC009v030201p.pdf
+  Scope: Common patterns for all MEC APIs (versioning, errors, security)
+
+
+================================================================================
+ARCHITECTURE CONTEXT
+================================================================================
+
+MEC Reference Points (ETSI GS MEC 003):
+
+  +------------------+          Mp1           +------------------+
+  |   MEC App        |<---------------------->|  MEC Platform    |
+  | (edge app)       |                        |  Manager         |
+  +------------------+                        +------------------+
+                                                      |
+                                                      | Mp2
+                                                      v
+                                              +------------------+
+                                              |  Virtualization  |
+                                              |  Infrastructure  |
+                                              +------------------+
+
+  Mp1: Application <-> Platform (this file implements Mp1)
+  Mp2: Platform <-> Virtualization Infrastructure
+  Mp3: Platform <-> Platform (inter-MEC)
+
+Integration with 5G Core:
+  - MEC Platform integrates with UPF at N6 interface
+  - Traffic rules steer user plane traffic to MEC applications
+  - Your N6 firewall (BlueField-3) sits at this integration point
+
+
+================================================================================
+LINE-BY-LINE SPECIFICATION MAPPING
+================================================================================
+
+
+LINES 1-25: IMPORTS AND SETUP
+--------------------------------------------------------------------------------
+
+Lines 5-6: FastAPI Imports
+  Used for: RESTful Mp1 API implementation
+  Spec: ETSI GS MEC 009 - RESTful API principles
+
+Lines 18-20: Logging and Tracing
+  from opentelemetry import trace
+  Used for: Distributed tracing across MEC services
+  Spec: Not in ETSI MEC, but aligned with OpenTelemetry conventions
+
+
+LINES 27-60: ETSI DATA TYPE ENUMS
+--------------------------------------------------------------------------------
+
+Lines 27-30: class SerializerType(str, Enum)
+  Spec: ETSI GS MEC 011 - Section 8.1.2.5 SerializerType
+  Values: JSON, XML, PROTOBUF3
+
+Lines 32-38: class LocalityType(str, Enum)
+  Spec: ETSI GS MEC 011 - Section 8.1.2.14 LocalityType
+  Use: Defines scope of service discovery
+  Values:
+    - MEC_SYSTEM: Across entire MEC system
+    - MEC_HOST: Single MEC host only
+    - NFVI_POP: NFV PoP level
+    - ZONE/ZONE_GROUP: Geographic zones
+    - NFVI_NODE: Single NFVI node
+
+Lines 40-44: class ServiceState(str, Enum)
+  Spec: ETSI GS MEC 011 - Section 8.1.2.3 ServiceState
+  Values: ACTIVE, INACTIVE, SUSPENDED
+
+Lines 46-53: class TransportType(str, Enum)
+  Spec: ETSI GS MEC 011 - Section 8.1.2.6 TransportType
+  Values:
+    - REST_HTTP: Standard HTTP REST
+    - MB_TOPIC_BASED: Message broker (topic-based)
+    - MB_ROUTING: Message broker (routing-based)
+    - MB_PUBSUB: Message broker (pub/sub)
+    - RPC/RPC_STREAMING: RPC-based
+    - WEBSOCKET: WebSocket
+
+
+LINES 55-100: TRANSPORT AND SERVICE MODELS
+--------------------------------------------------------------------------------
+
+Lines 55-57: class SecurityInfo(BaseModel)
+  Spec: ETSI GS MEC 011 - Section 8.1.2.11 SecurityInfo
+  Fields: oAuth2Info
+  Use: OAuth 2.0 token endpoint for service authentication
+
+Lines 59-70: class TransportInfo(BaseModel)
+  Spec: ETSI GS MEC 011 - Section 8.1.2.4 TransportInfo
+  OpenAPI: MecServiceMgmtApi.yaml - TransportInfo schema
+
+  Fields mapped to spec:
+    - id: Transport identifier
+    - name: Transport name (e.g., "REST_HTTP")
+    - type: TransportType enum
+    - protocol: Protocol name (e.g., "HTTP")
+    - version: Protocol version (e.g., "2.0")
+    - endpoint: Endpoint information (URIs)
+    - security: SecurityInfo for authentication
+
+Lines 72-77: class CategoryRef(BaseModel)
+  Spec: ETSI GS MEC 011 - Section 8.1.2.12 CategoryRef
+  Use: Categorization for service discovery
+
+Lines 79-100: class ServiceInfo(BaseModel)
+  Spec: ETSI GS MEC 011 - Section 8.1.2.2 ServiceInfo
+  OpenAPI: MecServiceMgmtApi.yaml - ServiceInfo schema
+
+  Fields mapped to spec:
+    - serInstanceId: Service instance ID (UUID)
+    - serName: Service name (e.g., "rnisService", "locationService")
+    - serCategory: Category reference
+    - version: API version
+    - state: ServiceState (ACTIVE/INACTIVE/SUSPENDED)
+    - transportInfo: How to reach the service
+    - serializer: JSON/XML/PROTOBUF3
+    - scopeOfLocality: Service availability scope
+    - consumedLocalOnly: Local consumption flag
+    - isLocal: Is this a local service
+    - livenessInterval: Heartbeat interval
+
+
+LINES 102-120: APPLICATION LIFECYCLE MODELS
+--------------------------------------------------------------------------------
+
+Lines 102-104: class AppReadyConfirmation(BaseModel)
+  Spec: ETSI GS MEC 011 - Section 8.1.3.2 AppReadyConfirmation
+  Use: MEC app confirms it's ready to serve
+
+Lines 106-108: class AppTerminationConfirmation(BaseModel)
+  Spec: ETSI GS MEC 011 - Section 8.1.3.3 AppTerminationConfirmation
+  Use: MEC app confirms graceful termination
+
+
+LINES 110-130: DNS AND TRAFFIC RULES
+--------------------------------------------------------------------------------
+
+Lines 110-118: class DnsRule(BaseModel)
+  Spec: ETSI GS MEC 011 - Section 8.1.2.8 DnsRule
+  Use: Local DNS resolution for MEC applications
+
+  Fields:
+    - dnsRuleId: Rule identifier
+    - domainName: Domain to resolve (e.g., "myapp.mec.local")
+    - ipAddressType: IP_V4 or IP_V6
+    - ipAddress: Target IP
+    - ttl: Time to live
+    - state: ACTIVE/INACTIVE
+
+  Integration: MEC Platform manages local DNS for edge apps
+
+Lines 120-130: class TrafficRule(BaseModel)
+  Spec: ETSI GS MEC 011 - Section 8.1.2.9 TrafficRule
+  Use: Steer traffic at N6 interface to MEC applications
+
+  Fields:
+    - trafficRuleId: Rule identifier
+    - filterType: FLOW or PACKET
+    - priority: 0-255 (higher = more priority)
+    - trafficFilter: Match criteria (IP, port, protocol)
+    - action: FORWARD_DECAPSULATED, FORWARD_AS_IS, etc.
+    - state: ACTIVE/INACTIVE
+
+  Integration Point:
+    - This connects to your UPF-Enhanced (upf_enhanced.py)
+    - Traffic rules steer N6 traffic to edge applications
+    - Your BlueField-3 DPU can accelerate this steering
+
+
+LINES 132-150: MEC APPLICATION AND HOST MODELS
+--------------------------------------------------------------------------------
+
+Lines 132-142: class MecAppInstance(BaseModel)
+  Spec: ETSI GS MEC 003 - Section 6.2.1.1 MEC Application
+        ETSI GS MEC 010-2 - App lifecycle management
+
+  Fields:
+    - appInstanceId: Application instance ID
+    - appName: Application name
+    - appProvider: Provider/vendor
+    - appDId: Descriptor ID (links to VNFD)
+    - instantiationState: NOT_INSTANTIATED, INSTANTIATED, TERMINATED
+    - instantiatedVnfInfo: VNF details (links to NFV)
+
+Lines 144-150: class MecHostInfo(BaseModel)
+  Spec: ETSI GS MEC 003 - Section 6.2.2 MEC Host
+  Use: Describes the MEC host where platform runs
+
+
+LINES 155-230: MEC PLATFORM CLASS - CORE LOGIC
+--------------------------------------------------------------------------------
+
+Lines 155-158: class MECPlatform.__init__
+  Spec: ETSI GS MEC 003 - MEC Platform Manager
+
+  Instance Variables:
+    - host_id: MEC host identifier
+    - platform_id: Platform identifier
+    - upf_url: Integration with 5G Core UPF
+    - services: Service registry (Mp1)
+    - app_instances: MEC application instances
+    - dns_rules: Local DNS rules
+    - traffic_rules: N6 traffic steering rules
+
+Lines 180-200: register_service()
+  Spec: ETSI GS MEC 011 - Section 8.2.2 POST /services
+  OpenAPI: paths./applications/{appInstanceId}/services.post
+
+  Operation: Register a new MEC service
+  Input: ServiceInfo
+  Output: ServiceInfo with serInstanceId
+
+Lines 202-230: discover_services()
+  Spec: ETSI GS MEC 011 - Section 8.2.3 GET /services
+  OpenAPI: paths./services.get
+
+  Query Parameters (per spec):
+    - ser_name: Filter by service name
+    - ser_category_id: Filter by category
+    - scope_of_locality: Filter by locality
+    - consumed_local_only: Filter by consumption mode
+    - is_local: Filter by local flag
+
+  Returns: List of matching ServiceInfo (only ACTIVE)
+
+
+LINES 232-280: SERVICE CRUD OPERATIONS
+--------------------------------------------------------------------------------
+
+Lines 232-238: get_service()
+  Spec: ETSI GS MEC 011 - Section 8.2.4 GET /services/{serviceId}
+
+Lines 240-250: update_service()
+  Spec: ETSI GS MEC 011 - Section 8.2.5 PUT /services/{serviceId}
+
+Lines 252-260: deregister_service()
+  Spec: ETSI GS MEC 011 - Section 8.2.6 DELETE /services/{serviceId}
+
+
+LINES 280-320: APPLICATION LIFECYCLE AND RULES
+--------------------------------------------------------------------------------
+
+Lines 280-290: confirm_app_ready()
+  Spec: ETSI GS MEC 011 - Section 8.3.2
+  Path: POST /applications/{appInstanceId}/confirm_ready
+
+Lines 292-300: add_dns_rule()
+  Spec: ETSI GS MEC 011 - Section 8.4.2
+  Path: PUT /applications/{appInstanceId}/dns_rules/{dnsRuleId}
+
+Lines 302-310: add_traffic_rule()
+  Spec: ETSI GS MEC 011 - Section 8.5.2
+  Path: PUT /applications/{appInstanceId}/traffic_rules/{trafficRuleId}
+
+Lines 312-320: notify_upf_traffic_steering()
+  NOT IN ETSI SPEC - Custom integration point
+
+  This method bridges MEC Platform to 5G Core UPF:
+    - Translates MEC traffic rules to UPF steering rules
+    - Enables N6 interface traffic steering
+    - Integration point for BlueField-3 DPU acceleration
+
+
+LINES 330-500: FASTAPI REST ENDPOINTS
+--------------------------------------------------------------------------------
+
+Lines 340-355: POST /mec_service_mgmt/v1/applications/{appInstanceId}/services
+  Spec: ETSI GS MEC 011 - Section 8.2.2 Service Registration
+  Status: 201 Created
+  Body: ServiceInfo
+  Response: ServiceInfo with serInstanceId
+
+Lines 358-370: GET /mec_service_mgmt/v1/services
+  Spec: ETSI GS MEC 011 - Section 8.2.3 Service Discovery
+  Query: ser_name, ser_category_id, scope_of_locality, etc.
+  Response: List[ServiceInfo]
+
+Lines 375-390: DELETE /mec_service_mgmt/v1/applications/{appInstanceId}/services/{serviceId}
+  Spec: ETSI GS MEC 011 - Section 8.2.6 Service Deregistration
+  Status: 204 No Content
+
+Lines 400-410: POST /mec_app_support/v1/applications/{appInstanceId}/confirm_ready
+  Spec: ETSI GS MEC 011 - Section 8.3.2
+  Status: 204 No Content
+
+Lines 420-430: PUT /mec_app_support/v1/applications/{appInstanceId}/dns_rules/{dnsRuleId}
+  Spec: ETSI GS MEC 011 - Section 8.4.2
+  Response: DnsRule
+
+Lines 440-460: PUT /mec_app_support/v1/applications/{appInstanceId}/traffic_rules/{trafficRuleId}
+  Spec: ETSI GS MEC 011 - Section 8.5.2
+  Response: TrafficRule
+  Side Effect: Notifies UPF for N6 traffic steering
+
+
+================================================================================
+INTEGRATION WITH 5G CORE (YOUR PLATFORM)
+================================================================================
+
+MEC Platform <-> UPF Integration:
+
+  Your platform has:
+    - upf_enhanced.py: UPF with GTP-U processing
+    - n6-interface-simulation/: BlueField-3 DPU firewall
+
+  MEC Platform integrates via:
+    - traffic_rules: Define which traffic goes to MEC apps
+    - notify_upf_traffic_steering(): Pushes rules to UPF
+
+  Data Flow:
+    1. MEC App registers traffic rule via Mp1
+    2. MEC Platform stores rule and notifies UPF
+    3. UPF steers matching N6 traffic to MEC app
+    4. BlueField-3 DPU can accelerate this at line rate
+
+  Example Traffic Rule:
+    {
+      "trafficRuleId": "rule-001",
+      "filterType": "FLOW",
+      "priority": 100,
+      "trafficFilter": [
+        {"srcIp": "10.0.0.0/8", "dstPort": 80, "protocol": "TCP"}
+      ],
+      "action": "FORWARD_DECAPSULATED"
+    }
+
+
+================================================================================
+OPENTELEMETRY SPAN ATTRIBUTES
+================================================================================
+
+Tracing attributes used:
+
+  span.set_attribute("etsi.service", "Mx1")
+    Identifies the ETSI reference point
+
+  span.set_attribute("etsi.operation", "RegisterService")
+    Identifies the operation being performed
+
+  span.set_attribute("etsi.spec", "GS MEC 011")
+    Links to governing specification
+
+  span.set_attribute("service.instance_id", ...)
+    Service identifier for correlation
+
+  span.set_attribute("discovered.count", ...)
+    Discovery result count
+
+
+================================================================================
+GAPS VS FULL ETSI GS MEC 011 COMPLIANCE
+================================================================================
+
+Operations NOT implemented:
+  - Subscription/Notification for service availability changes
+  - Timing Capabilities API (Section 8.6)
+  - Transport Info query (Section 8.2.7)
+  - Service availability subscription callbacks
+
+Features NOT implemented:
+  - Full OAuth2 security (GS MEC 009)
+  - End-to-end timing synchronization
+  - Multi-access technology awareness
+  - Complete error response model (ProblemDetails)
+
+Future Integration Points:
+  - GS MEC 012 (RNIS): Radio network info from gNodeB
+  - GS MEC 013 (Location): UE location from AMF
+  - GS MEC 028 (WLAN): WLAN access info
+  - GS MEC 030 (V2X): Vehicle-to-everything services
+
+
+================================================================================
+SPECIFICATION FILE LOCATIONS
+================================================================================
+
+Primary ETSI Specs:
+  90_Work-Telco/ETSI/MEC/gs_mec003v030101p.pdf       (Framework)
+  90_Work-Telco/ETSI/MEC/gs_MEC011v020201p.pdf       (App Enablement)
+  90_Work-Telco/ETSI/MEC/gs_MEC009v030201p.pdf       (API Principles)
+
+OpenAPI Definitions:
+  90_Work-Telco/ETSI/forge/gs011-app-enablement-api/
+  90_Work-Telco/ETSI/forge/gs012-rnis-api/
+  90_Work-Telco/ETSI/forge/gs013-location-api/
+
+Related 5G Core Components:
+  5G_Emulator_API/core_network/upf_enhanced.py       (UPF integration)
+  open-digital-platform-2_0/n6-interface-simulation/ (BlueField-3)
+
+
+================================================================================
+                         END OF SPECIFICATION MAP
+================================================================================

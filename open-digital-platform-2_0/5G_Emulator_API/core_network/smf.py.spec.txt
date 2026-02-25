@@ -1,0 +1,436 @@
+================================================================================
+                    SPECIFICATION MAP: smf.py
+              Session Management Function - Spec Reference Bridge
+================================================================================
+
+Source File: 5G_Emulator_API/core_network/smf.py
+Generated:   2026-01-06
+Purpose:     Map each code section to governing 3GPP and IETF specifications
+
+
+================================================================================
+PRIMARY GOVERNING SPECIFICATIONS
+================================================================================
+
+3GPP TS 29.502 - Session Management Services (Nsmf)
+  Location: 90_Work-Telco/3GPP/Rel-19/29_series/29502-j40.docx
+  YAML API: 90_Work-Telco/3GPP/Rel-19/29_series/TS29502_Nsmf_PDUSession.yaml
+  Scope:    Defines the Nsmf_PDUSession service API
+
+3GPP TS 29.244 - PFCP Protocol (N4 Interface)
+  Location: 90_Work-Telco/3GPP/Rel-19/29_series/29244-j30.docx
+  Scope:    Defines SMF-UPF control plane protocol
+
+3GPP TS 23.502 - Procedures for 5G System
+  Location: 90_Work-Telco/3GPP/Rel-19/23_series/23502-j40.docx
+  Scope:    Defines PDU Session Establishment procedure
+
+3GPP TS 23.501 - System Architecture for 5G System
+  Location: 90_Work-Telco/3GPP/Rel-19/23_series/23501-j40.docx
+  Scope:    Defines SMF role, interfaces, and responsibilities
+
+
+================================================================================
+LINE-BY-LINE SPECIFICATION MAPPING
+================================================================================
+
+
+LINES 1-15: IMPORTS AND SETUP
+--------------------------------------------------------------------------------
+
+Line 3: from fastapi import FastAPI, Request, HTTPException
+  Spec: OpenAPI 3.0 (OAS3) - Your YAML files use this
+        RFC 7231 - HTTP/1.1 Semantics (status codes)
+        RFC 7807 - Problem Details for HTTP APIs (HTTPException)
+  Note: FastAPI implements HTTP server per web standards
+
+Line 12: from opentelemetry import trace
+  Spec: OpenTelemetry Specification (CNCF)
+        W3C Trace Context - traceparent header propagation
+  Note: Enables distributed tracing across NF calls
+
+
+LINES 33-36: OPENTELEMETRY TRACER SETUP
+--------------------------------------------------------------------------------
+
+Line 34: resource = Resource.create({"service.name": "smf-service"})
+  Spec: OpenTelemetry Resource Semantic Conventions
+        Attribute: service.name identifies the NF in traces
+  3GPP: Supports TS 32.422 trace management concepts
+
+Line 36: tracer = trace.get_tracer(__name__)
+  Spec: OpenTelemetry Tracing API
+  Use:  Creates spans for each 3GPP procedure
+
+
+LINES 38-42: NRF DISCOVERY AND SESSION STORAGE
+--------------------------------------------------------------------------------
+
+Line 38: nrf_url = "http://127.0.0.1:8000"
+  Spec: 3GPP TS 29.510 - NRF Services (Nnrf)
+        Section 5.2.3.2 - NF Discovery
+  Flow: SMF discovers UPF via NRF before session establishment
+
+Line 42: session_contexts: Dict[str, Dict] = {}
+  Spec: 3GPP TS 29.502 - Section 6.1.6.2.3 SmContext
+        Stores SM Context per PDU Session
+  Key:  {SUPI}:{pduSessionId} per TS 29.502
+
+
+LINES 44-71: NF LIFECYCLE (REGISTRATION/DISCOVERY)
+--------------------------------------------------------------------------------
+
+Lines 48-52: nf_registration payload
+  Spec: 3GPP TS 29.510 - Section 6.1.6.2.2 NFProfile
+        Required fields: nfType, ipv4Addresses
+  YAML: TS29510_Nnrf_NFManagement.yaml - NFProfile schema
+  Note: Simplified; full profile has 60+ optional fields
+
+Line 54: requests.post(f"{nrf_url}/register", ...)
+  Spec: 3GPP TS 29.510 - Section 5.2.2.2 NFRegister
+        HTTP Method: PUT (spec) vs POST (your implementation)
+        Path: /nnrf-nfm/v1/nf-instances/{nfInstanceId}
+  Gap:  Your /register is legacy; spec uses PUT with instance ID
+
+Lines 58-64: UPF Discovery
+  Spec: 3GPP TS 29.510 - Section 5.2.3.2 NFDiscover
+        Query: target-nf-type=UPF
+        Path:  /nnrf-disc/v1/nf-instances?target-nf-type=UPF
+  Note: Discovery enables N4 interface establishment
+
+
+LINES 74-142: PFCP SESSION ESTABLISHMENT (N4 INTERFACE)
+================================================================================
+
+This function models the N4 interface between SMF and UPF.
+
+Line 74: def _send_pfcp_establishment_request(pdu_session: dict)
+  Spec: 3GPP TS 29.244 - Section 7.2.2.1
+        "PFCP Session Establishment Request"
+  Wire: Real PFCP uses UDP port 8805; you model via HTTP
+
+Lines 87-117: PFCP Message Structure
+  Spec: 3GPP TS 29.244 - Section 7.5.2 Create PDR IE
+        Section 7.5.3 Create FAR IE
+        Section 7.5.4 Create QER IE
+
+  Line 88: "messageType": "PFCP_SESSION_ESTABLISHMENT_REQUEST"
+    Spec: TS 29.244 Table 7.2.2.1-1, Message Type = 50
+    Ref:  Section 7.4.1 - Message Type IE
+
+  Line 89: "seid": SMF's Session Endpoint Identifier
+    Spec: TS 29.244 - Section 7.4.2 F-SEID IE
+          64-bit identifier, unique per PFCP session
+    Note: Format is simplified; real SEID is binary
+
+  Lines 90-99: createPDR (Packet Detection Rule)
+    Spec: TS 29.244 - Section 7.5.2 Create PDR IE
+
+    Line 91: "pdrId": 1
+      Spec: TS 29.244 - Section 8.2.36 PDR ID IE
+            16-bit identifier, 1-65535
+
+    Line 92: "precedence": 200
+      Spec: TS 29.244 - Section 8.2.37 Precedence IE
+            32-bit, lower value = higher precedence
+
+    Lines 93-97: "pdi" (Packet Detection Information)
+      Spec: TS 29.244 - Section 8.2.38 PDI IE
+
+      Line 94: "sourceInterface": "ACCESS"
+        Spec: TS 29.244 - Section 8.2.2 Source Interface IE
+              Values: ACCESS (0), CORE (1), SGi-LAN (2), CP-function (3)
+        Note: ACCESS = N3 interface from gNB
+
+      Line 95: "ueIpAddress"
+        Spec: TS 29.244 - Section 8.2.62 UE IP Address IE
+              Contains IPv4 and/or IPv6 address
+
+      Line 96: "networkInstance"
+        Spec: TS 29.244 - Section 8.2.4 Network Instance IE
+              Maps to DNN (Data Network Name)
+        3GPP: TS 23.501 Section 5.6.1 defines DNN
+
+    Line 98: "farId": 1
+      Spec: TS 29.244 - Section 8.2.74 FAR ID IE
+            Links PDR to its Forwarding Action Rule
+
+  Lines 100-110: createFAR (Forwarding Action Rule)
+    Spec: TS 29.244 - Section 7.5.3 Create FAR IE
+
+    Line 101: "farId": 1
+      Spec: TS 29.244 - Section 8.2.74 FAR ID IE
+
+    Line 102: "applyAction": "FORWARD"
+      Spec: TS 29.244 - Section 8.2.26 Apply Action IE
+            Bit 1 = FORW (Forward)
+            Other bits: DROP, BUFF, NOCP, DUPL
+
+    Lines 103-109: "forwardingParameters"
+      Spec: TS 29.244 - Section 8.2.27 Forwarding Parameters IE
+
+      Line 104: "destinationInterface": "CORE"
+        Spec: TS 29.244 - Section 8.2.3 Destination Interface IE
+              CORE (1) = toward N6/DN interface
+
+      Lines 105-108: "outerHeaderCreation"
+        Spec: TS 29.244 - Section 8.2.56 Outer Header Creation IE
+
+        Line 107: "teid": "1001"
+          Spec: TS 29.281 - GTP-U Tunnel Endpoint Identifier
+                32-bit identifier for N3 tunnel
+          Wire: GTP-U header contains this TEID
+
+  Lines 111-116: createQER (QoS Enforcement Rule)
+    Spec: TS 29.244 - Section 7.5.4 Create QER IE
+
+    Line 112: "qerId": 1
+      Spec: TS 29.244 - Section 8.2.75 QER ID IE
+
+    Line 113: "qfi": 9
+      Spec: TS 29.244 - Section 8.2.89 QFI IE
+            6-bit QoS Flow Identifier (0-63)
+      3GPP: TS 23.501 Section 5.7.1.1 - QoS Flow concept
+            QFI 9 = best effort (5QI 9)
+
+    Lines 114-115: "uplinkMBR", "downlinkMBR"
+      Spec: TS 29.244 - Section 8.2.51 MBR IE
+            Maximum Bit Rate in bits/second
+      Note: 100000000 = 100 Mbps
+
+
+Lines 121-125: OpenTelemetry Span Attributes
+  Spec: OpenTelemetry Semantic Conventions (custom 3GPP extension)
+
+  Line 122: span.set_attribute("3gpp.interface", "N4")
+    Custom: Identifies N4 reference point (SMF-UPF)
+    3GPP:   TS 23.501 Section 4.2.4 - Reference Points
+
+  Line 123: span.set_attribute("3gpp.protocol", "PFCP")
+    Custom: Protocol identification
+    3GPP:   TS 29.244 defines PFCP
+
+  Line 124: span.set_attribute("pdu.session.id", ...)
+    Custom: Session identifier for correlation
+    3GPP:   TS 24.501 Section 9.4 - PDU Session ID
+
+  Line 125: span.set_attribute("pfcp.seid", ...)
+    Custom: PFCP session endpoint identifier
+    3GPP:   TS 29.244 Section 7.4.2
+
+
+Line 128: requests.post(n4_endpoint, json=pfcp_request, timeout=5)
+  Spec: HTTP modeling of PFCP (real PFCP is UDP/8805)
+        RFC 7231 - HTTP POST method
+  Wire: Production uses TS 29.244 binary encoding over UDP
+
+
+LINES 144-231: CREATE SM CONTEXT (N11 INTERFACE - AMF TO SMF)
+================================================================================
+
+This is the main SBI endpoint implementing Nsmf_PDUSession service.
+
+Line 144: @app.post("/nsmf-pdusession/v1/sm-contexts")
+  Spec: 3GPP TS 29.502 - Section 5.2.2.2.1
+        "Nsmf_PDUSession Create SM Context Service Operation"
+  YAML: TS29502_Nsmf_PDUSession.yaml - paths./sm-contexts.post
+  Path: {apiRoot}/nsmf-pdusession/{apiVersion}/sm-contexts
+
+  Exact YAML match (TS29502_Nsmf_PDUSession.yaml lines 34-150):
+    paths:
+      /sm-contexts:
+        post:
+          summary: Create SM Context
+          operationId: PostSmContexts
+          requestBody:
+            content:
+              multipart/related:
+                schema:
+                  properties:
+                    jsonData:
+                      $ref: '#/components/schemas/SmContextCreateData'
+
+
+Lines 150-152: Extract Request Data
+  Spec: 3GPP TS 29.502 - Section 6.1.6.2.2 SmContextCreateData
+  YAML: TS29502_Nsmf_PDUSession.yaml - SmContextCreateData schema
+
+  Line 151: supi = pdu_session_data.get('supi')
+    Spec: TS 29.502 - SmContextCreateData.supi (required)
+          TS 23.003 - SUPI format: imsi-{mcc}{mnc}{msin}
+    YAML: type: string, pattern: '^(imsi-[0-9]{5,15}|...)$'
+
+  Line 152: pdu_session_id = pdu_session_data.get('pduSessionId')
+    Spec: TS 29.502 - SmContextCreateData.pduSessionId (required)
+          TS 24.501 - Section 9.4, range 1-15
+    YAML: type: integer, minimum: 1, maximum: 255
+
+
+Lines 156-161: 3GPP Field Validation
+  Spec: 3GPP TS 29.502 - Section 6.1.6.2.2
+        Mandatory fields for SmContextCreateData
+
+  Line 157: required_fields = ['supi', 'pduSessionId', 'dnn', 'sNssai', 'anType']
+    Spec References:
+    - supi:        TS 23.003 - Subscriber identifier
+    - pduSessionId: TS 24.501 Section 9.4
+    - dnn:         TS 23.501 Section 5.6.1 - Data Network Name
+    - sNssai:      TS 23.501 Section 5.15.2 - Network Slice
+    - anType:      TS 29.571 - AccessType enum (3GPP_ACCESS, NON_3GPP_ACCESS)
+
+  Line 161: raise HTTPException(status_code=400, detail=...)
+    Spec: RFC 7807 - Problem Details for HTTP APIs
+          3GPP TS 29.500 Section 5.2.7 - Error handling
+    YAML: TS29571_CommonData.yaml - ProblemDetails schema
+
+
+Lines 164-170: OpenTelemetry Span for Procedure
+  Spec: OpenTelemetry Tracing API + Custom 3GPP Conventions
+
+  Line 165: span.set_attribute("3gpp.procedure", "pdu_session_establishment")
+    3GPP: TS 23.502 Section 4.3.2 - PDU Session Establishment
+
+  Line 166: span.set_attribute("3gpp.interface", "N11")
+    3GPP: TS 23.501 Section 4.2.4 - N11 reference point (AMF-SMF)
+
+  Line 167: span.set_attribute("3gpp.service", "Nsmf_PDUSession")
+    3GPP: TS 29.502 - Service name
+
+
+Lines 172-174: UE IP Address Allocation
+  Spec: 3GPP TS 29.244 - Section 8.2.62 UE IP Address IE
+        3GPP TS 23.501 - Section 5.6.8 IP Address Management
+  Note: Simplified; production SMF interacts with UPF for allocation
+
+  Line 173: ue_ip = f"10.{(pdu_session_id % 254) + 1}.0.1"
+    Spec: RFC 1918 - Private Address Space (10.0.0.0/8)
+    Gap:  Real allocation per TS 29.244 Session Establishment
+
+
+Lines 176-181: Session Context Creation
+  Spec: 3GPP TS 29.502 - Section 6.1.6.2.3 SmContext
+        Internal SMF state per PDU session
+
+  Line 180: "sessionState": "ESTABLISHING"
+    Spec: State machine not explicitly in spec
+          Derived from TS 23.502 procedure steps
+
+
+Lines 183: N4 Session Establishment
+  Spec: 3GPP TS 23.502 - Section 4.3.2.2.1 Step 11
+        "SMF sends PFCP Session Establishment Request to UPF"
+  Call: _send_pfcp_establishment_request() - see above
+
+
+Lines 186-192: Store Session Context
+  Spec: 3GPP TS 29.502 - SmContext storage
+
+  Line 186: session_key = f"{supi}:{pdu_session_id}"
+    Spec: TS 29.502 - smContextRef format (implementation choice)
+
+  Line 190: "pfcpSeid": PFCP session identifier
+    Spec: TS 29.244 - Section 7.4.2 F-SEID IE
+
+  Line 191: "n3TunnelInfo": GTP-U tunnel endpoint
+    Spec: TS 29.281 - N3 user plane tunnel
+          TS 29.502 - TunnelInfo in SmContext
+
+
+Lines 196-216: Response to AMF (N11 Response)
+  Spec: 3GPP TS 29.502 - Section 6.1.6.2.3 SmContextCreatedData
+  YAML: TS29502_Nsmf_PDUSession.yaml - SmContextCreatedData schema
+
+  Line 198: "cause": "PDU_SESSION_ESTABLISHMENT_ACCEPTED"
+    Spec: TS 29.502 - Cause enum
+    YAML: TS29502_Nsmf_PDUSession.yaml - Cause schema
+
+  Lines 201-210: "n2SmInfo" (N2 SM Information for gNB)
+    Spec: TS 29.502 - Section 6.1.6.2.25 N2SmInformation
+          TS 38.413 - NGAP PDU Session Resource Setup Request
+
+    Line 203: "qosFlowSetupRequestList"
+      Spec: TS 38.413 - Section 9.3.1.24
+            QoS Flow Setup Request List IE
+
+    Lines 204-208: QoS Flow with 5QI
+      Spec: TS 23.501 - Section 5.7.2 5QI characteristics
+            5QI 9 = Default, Non-GBR, best effort
+
+      Line 206: "5qi": 9
+        Spec: TS 23.501 - Table 5.7.4-1
+              5QI 9: Default, Priority 80, Non-GBR
+
+    Line 210: "n2InfoContent": "base64-encoded-ngap-..."
+      Spec: TS 29.502 - N2 SM Information is NGAP encoded
+            TS 38.413 - ASN.1 PER encoded PDU
+      Note: Placeholder; real impl would be ASN.1 encoded
+
+
+Lines 219-223: OpenTelemetry Event
+  Spec: OpenTelemetry Events API
+  Use:  Mark successful SM context creation with attributes
+
+
+LINES 233-243: DEBUG/MONITORING ENDPOINTS
+--------------------------------------------------------------------------------
+
+Line 233: @app.get("/smf/sessions")
+  Spec: Not in 3GPP specs - internal debugging endpoint
+  Note: Production SMF exposes Nsmf_EventExposure for events
+        TS 29.508 - Nsmf_EventExposure service
+
+Line 241: @app.get("/smf_service")
+  Spec: Not in 3GPP specs - health check
+  Alt:  Could implement /health per cloud-native conventions
+
+
+LINE 246: SERVER STARTUP
+--------------------------------------------------------------------------------
+
+Line 246: uvicorn.run(app, host="127.0.0.1", port=9001)
+  Spec: ASGI Specification - Async Server Gateway Interface
+        3GPP TS 29.500 - HTTP/2 preferred (uvicorn supports)
+  Port: 9001 is custom; no standard SMF port defined
+
+
+================================================================================
+RELATED SPECIFICATIONS NOT YET IMPLEMENTED
+================================================================================
+
+The following specs define additional SMF capabilities:
+
+3GPP TS 29.502 Operations Not Implemented:
+  - UpdateSMContext (Section 5.2.2.3)
+  - ReleaseSMContext (Section 5.2.2.4)
+  - RetrieveSMContext (Section 5.2.2.6)
+  - SendMoData (Section 5.2.2.5)
+
+3GPP TS 29.508 - Nsmf_EventExposure:
+  - Event subscription and notification
+  - YAML: TS29508_Nsmf_EventExposure.yaml
+
+3GPP TS 29.512 - SMF Policy Control:
+  - PCF interaction for QoS policies
+  - YAML: TS29512_Npcf_SMPolicyControl.yaml
+
+
+================================================================================
+SPECIFICATION FILE LOCATIONS
+================================================================================
+
+Primary Specs (in your 3GPP folder):
+  90_Work-Telco/3GPP/Rel-19/29_series/29502-j40.docx
+  90_Work-Telco/3GPP/Rel-19/29_series/29244-j30.docx
+  90_Work-Telco/3GPP/Rel-19/29_series/TS29502_Nsmf_PDUSession.yaml
+  90_Work-Telco/3GPP/Rel-19/23_series/23502-j40.docx
+  90_Work-Telco/3GPP/Rel-19/23_series/23501-j40.docx
+
+Related Networking Knowledge:
+  21_Networking_Public_Data/43_Telecom_5G_Interfaces/
+  21_Networking_Public_Data/45_Telecom_5G_NFs/
+  21_Networking_Public_Data/09_QoS/
+
+
+================================================================================
+                         END OF SPECIFICATION MAP
+================================================================================

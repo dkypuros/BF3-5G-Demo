@@ -1,0 +1,283 @@
+================================================================================
+                    SPECIFICATION MAP: pgw.py
+           PDN Gateway - Spec Reference Bridge
+================================================================================
+
+Source File: 5G_Emulator_API/core_network/pgw.py
+Generated:   2026-01-10
+Lines:       827
+Purpose:     Map each code section to governing 3GPP specifications
+Based On:    Open5GS SMF (combined PGW-C/PGW-U)
+
+================================================================================
+PRIMARY GOVERNING SPECIFICATIONS
+================================================================================
+
+3GPP TS 23.401 - GPRS Enhancements for E-UTRAN Access
+  Location: 90_Work-Telco/3GPP/Rel-19/23_series/
+  Scope: PGW functional description
+  Key Sections:
+    - Section 4.4.3.3: PGW function
+    - Section 5.4: EPS bearer procedures
+
+3GPP TS 29.274 - GTPv2-C Protocol
+  Location: 90_Work-Telco/3GPP/Rel-19/29_series/
+  Scope: S5/S8 control plane
+  Key Sections:
+    - Section 7: GTPv2-C messages
+
+3GPP TS 23.203 - Policy and Charging Control
+  Location: 90_Work-Telco/3GPP/Rel-19/23_series/
+  Scope: PCC rules, QoS enforcement
+
+3GPP TS 29.212 - Gx Interface
+  Location: 90_Work-Telco/3GPP/Rel-19/29_series/
+  Scope: Policy control (PGW <-> PCRF)
+
+3GPP TS 32.240 - Charging Architecture
+  Location: 90_Work-Telco/3GPP/Rel-19/32_series/
+  Scope: Gy interface for online charging
+
+
+================================================================================
+LINE-BY-LINE SPECIFICATION MAPPING
+================================================================================
+
+
+LINES 1-35: MODULE HEADER AND IMPORTS
+--------------------------------------------------------------------------------
+
+Lines 1-5: Module Documentation
+  Reference: Open5GS SMF
+  3GPP Specs: TS 23.401
+
+
+LINES 36-167: DATA MODELS
+--------------------------------------------------------------------------------
+
+Lines 40-45: class PdnType(Enum)
+  Spec: TS 24.301 Section 9.9.4.10 - PDN type
+
+  Types: IPv4, IPv6, IPv4v6
+
+Lines 46-50: class BearerState(Enum)
+  Spec: TS 23.401 - Bearer states
+
+Lines 51-59: class IpPool
+  Purpose: IP address pool management
+
+Lines 60-71: class ApnConfiguration
+  Spec: TS 23.401 Section 4.7.1 - APN configuration
+
+  Contains:
+    - APN name
+    - PDN type
+    - Default QCI and ARP
+    - APN-AMBR
+    - DNS servers
+
+Lines 72-77: class GtpTunnel
+  Spec: TS 29.281 - GTP-U tunnel endpoint
+
+Lines 78-91: class PccRule
+  Spec: TS 23.203 Section 6.3 - PCC Rule
+
+  PCC Rule structure:
+    - Rule ID and name
+    - Precedence
+    - Flow direction/description
+    - QoS parameters (QCI, GBR, MBR)
+    - Charging key
+
+Lines 92-116: class PgwBearer
+  Spec: TS 23.401 Section 5.4.1 - Bearer context at PGW
+
+  Contains:
+    - S5/S8 GTP-U tunnels
+    - QoS parameters
+    - PCC rules applied
+    - Usage counters
+
+Lines 117-146: class PgwSession
+  Spec: TS 23.401 - PDN connection at PGW
+
+  Session contains:
+    - Subscriber info (IMSI, MSISDN)
+    - Allocated IP address
+    - S5/S8-C TEIDs
+    - APN-AMBR
+    - Bearer list
+    - Charging ID
+
+Lines 147-167: Request/Response Models
+  Spec: TS 29.274 - GTPv2-C structures
+
+
+LINES 169-326: PGW CONTEXT MANAGER
+--------------------------------------------------------------------------------
+
+Lines 173-246: class PgwContext.__init__
+  Spec: TS 23.401 Section 4.4.3.3 - PGW functions
+
+  Configuration:
+    - IP pools (IPv4 and IPv6)
+    - APN configurations
+    - Session storage
+
+  Default APNs:
+    - internet: IPv4, QCI 9
+    - ims: IPv4v6, QCI 5
+
+Lines 248-287: IP Address Management
+  - allocate_ip(): Allocate from pool
+  - release_ip(): Return to pool
+
+Lines 288-322: Session Management
+  - add_session() / remove_session()
+
+
+LINES 328-352: HEALTH AND CONFIGURATION
+--------------------------------------------------------------------------------
+
+Lines 332-352: Health and configuration endpoints
+
+
+LINES 353-505: S5/S8 INTERFACE (SGW <-> PGW)
+--------------------------------------------------------------------------------
+
+Lines 358-480: create_session()
+  Spec: TS 29.274 Section 7.2.1 - Create Session Request
+
+  Procedure per TS 29.274:
+    1. Get APN configuration
+    2. Allocate IP address from pool
+    3. Create session with S5/S8-C TEIDs
+    4. Create bearers with:
+       - S5-U tunnel (PGW side)
+       - Default PCC rule
+    5. Return Create Session Response with:
+       - PDN address
+       - APN-AMBR
+       - PCO (DNS servers)
+       - Bearer contexts
+
+Lines 482-505: delete_session()
+  Spec: TS 29.274 Section 7.2.9 - Delete Session Request
+
+  Releases:
+    - IP address back to pool
+    - Session and bearers
+
+Lines 507-545: modify_bearer()
+  Spec: TS 29.274 Section 7.2.7 - Modify Bearer Request
+
+  Updates S5-U tunnel endpoint
+
+
+LINES 547-661: DEDICATED BEARER MANAGEMENT
+--------------------------------------------------------------------------------
+
+Lines 551-628: create_dedicated_bearer()
+  Spec: TS 29.274 Section 7.2.3 - Create Bearer Request
+  Spec: TS 23.203 - PCC-triggered bearer creation
+
+  PGW-initiated procedure:
+    1. Find linked default bearer
+    2. Allocate new EBI
+    3. Create bearer with GBR parameters
+    4. Apply PCC rule
+
+Lines 630-661: delete_dedicated_bearer()
+  Spec: TS 29.274 Section 7.2.4 - Delete Bearer Request
+
+  Cannot delete default bearer (EBI 5)
+
+
+LINES 663-700: GX INTERFACE (POLICY CONTROL)
+--------------------------------------------------------------------------------
+
+Lines 667-686: install_pcc_rule()
+  Spec: TS 29.212 - Gx Re-Auth-Request
+
+  Installs PCC rule on bearer for:
+    - Traffic detection
+    - QoS enforcement
+    - Charging
+
+Lines 688-700: remove_pcc_rule()
+  Spec: TS 29.212 - Rule removal
+
+
+LINES 702-729: GY INTERFACE (CHARGING)
+--------------------------------------------------------------------------------
+
+Lines 706-729: report_usage()
+  Spec: TS 32.240 - Gy Credit-Control
+
+  Records usage for:
+    - Online charging quota management
+    - Offline CDR generation
+
+
+LINES 731-811: SESSION MANAGEMENT
+--------------------------------------------------------------------------------
+
+Lines 735-794: Session listing and detail endpoints
+
+Lines 796-811: get_statistics()
+  Returns:
+    - IP pool usage
+    - Procedure counts
+    - Traffic statistics
+
+
+================================================================================
+SPECIFICATION CROSS-REFERENCE TABLE
+================================================================================
+
+| Code Section            | Primary Spec | Section        |
+|-------------------------|--------------|----------------|
+| PdnType                 | TS 24.301    | 9.9.4.10       |
+| ApnConfiguration        | TS 23.401    | 4.7.1          |
+| PccRule                 | TS 23.203    | 6.3            |
+| PgwBearer               | TS 23.401    | 5.4.1          |
+| create_session          | TS 29.274    | 7.2.1          |
+| delete_session          | TS 29.274    | 7.2.9          |
+| modify_bearer           | TS 29.274    | 7.2.7          |
+| create_dedicated_bearer | TS 29.274    | 7.2.3          |
+| delete_dedicated_bearer | TS 29.274    | 7.2.4          |
+| install_pcc_rule        | TS 29.212    | -              |
+| report_usage            | TS 32.240    | -              |
+
+
+================================================================================
+PGW FUNCTIONS (TS 23.401)
+================================================================================
+
+| Function                    | Description                              |
+|-----------------------------|------------------------------------------|
+| IP allocation               | Assign IPv4/IPv6 to PDN connections      |
+| Packet routing/forwarding   | Route between UE and external networks   |
+| Policy enforcement (Gx)     | Apply PCC rules from PCRF                |
+| Charging (Gy/Gz)            | Online/offline charging support          |
+| Packet filtering            | Apply TFTs for bearer binding            |
+| Lawful interception         | Support for LI interfaces                |
+
+
+================================================================================
+PGW INTERFACE MAPPING
+================================================================================
+
+| Interface | Connected NF | Protocol   | Purpose                    |
+|-----------|--------------|------------|----------------------------|
+| S5/S8-C   | SGW          | GTPv2-C    | Session management         |
+| S5/S8-U   | SGW          | GTP-U      | User plane                 |
+| Gx        | PCRF         | Diameter   | Policy control             |
+| Gy        | OCS          | Diameter   | Online charging            |
+| Gz        | OFCS         | GTP' (CDR) | Offline charging           |
+| SGi       | PDN/Internet | IP         | External data network      |
+
+
+================================================================================
+                              END OF DOCUMENT
+================================================================================

@@ -1,0 +1,422 @@
+# 5G Core Network Emulator - Docker Compose Configuration
+# Deploys all 5G NFs with MongoDB persistence and Jaeger tracing
+
+version: '3.8'
+
+services:
+  # =============================================================================
+  # Infrastructure Services
+  # =============================================================================
+
+  mongodb:
+    image: mongo:7.0
+    container_name: 5g-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: 5g_core
+    networks:
+      - 5g-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.52
+    container_name: 5g-jaeger
+    restart: unless-stopped
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "6831:6831/udp"  # Jaeger Thrift compact
+      - "14268:14268"  # Jaeger HTTP collector
+      - "4317:4317"  # OTLP gRPC
+      - "4318:4318"  # OTLP HTTP
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    networks:
+      - 5g-network
+
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: 5g-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    networks:
+      - 5g-network
+
+  # =============================================================================
+  # 5G Core Network Functions - Phase 1: Service Discovery
+  # =============================================================================
+
+  nrf:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: 5g-nrf
+    restart: unless-stopped
+    command: python core_network/nrf.py
+    ports:
+      - "9000:9000"
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017
+      - JAEGER_HOST=jaeger
+      - NRF_HOST=nrf
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - 5g-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # =============================================================================
+  # 5G Core Network Functions - Phase 2: Data Management
+  # =============================================================================
+
+  udr:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: 5g-udr
+    restart: unless-stopped
+    command: python core_network/udr.py
+    ports:
+      - "9007:9007"
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017
+      - JAEGER_HOST=jaeger
+      - NRF_URI=http://nrf:9000
+    depends_on:
+      - nrf
+    networks:
+      - 5g-network
+
+  udm:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: 5g-udm
+    restart: unless-stopped
+    command: python core_network/udm.py
+    ports:
+      - "9005:9005"
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017
+      - JAEGER_HOST=jaeger
+      - NRF_URI=http://nrf:9000
+      - UDR_URI=http://udr:9007
+    depends_on:
+      - nrf
+      - udr
+    networks:
+      - 5g-network
+
+  # =============================================================================
+  # 5G Core Network Functions - Phase 3: Security
+  # =============================================================================
+
+  ausf:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: 5g-ausf
+    restart: unless-stopped
+    command: python core_network/ausf.py
+    ports:
+      - "9004:9004"
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017
+      - JAEGER_HOST=jaeger
+      - NRF_URI=http://nrf:9000
+      - UDM_URI=http://udm:9005
+    depends_on:
+      - nrf
+      - udm
+    networks:
+      - 5g-network
+
+  # =============================================================================
+  # 5G Core Network Functions - Phase 4: Policy & Charging
+  # =============================================================================
+
+  pcf:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: 5g-pcf
+    restart: unless-stopped
+    command: python core_network/pcf.py
+    ports:
+      - "9006:9006"
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017
+      - JAEGER_HOST=jaeger
+      - NRF_URI=http://nrf:9000
+      - UDR_URI=http://udr:9007
+    depends_on:
+      - nrf
+      - udr
+    networks:
+      - 5g-network
+
+  chf:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: 5g-chf
+    restart: unless-stopped
+    command: python core_network/chf.py
+    ports:
+      - "9013:9013"
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017
+      - JAEGER_HOST=jaeger
+      - NRF_URI=http://nrf:9000
+    depends_on:
+      - nrf
+    networks:
+      - 5g-network
+
+  # =============================================================================
+  # 5G Core Network Functions - Phase 5: Slice & Binding
+  # =============================================================================
+
+  nssf:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: 5g-nssf
+    restart: unless-stopped
+    command: python core_network/nssf.py
+    ports:
+      - "9010:9010"
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017
+      - JAEGER_HOST=jaeger
+      - NRF_URI=http://nrf:9000
+    depends_on:
+      - nrf
+    networks:
+      - 5g-network
+
+  bsf:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: 5g-bsf
+    restart: unless-stopped
+    command: python core_network/bsf.py
+    ports:
+      - "9011:9011"
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017
+      - JAEGER_HOST=jaeger
+      - NRF_URI=http://nrf:9000
+    depends_on:
+      - nrf
+    networks:
+      - 5g-network
+
+  # =============================================================================
+  # 5G Core Network Functions - Phase 6: Session Management
+  # =============================================================================
+
+  amf:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: 5g-amf
+    restart: unless-stopped
+    command: python core_network/amf.py
+    ports:
+      - "9001:9001"
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017
+      - JAEGER_HOST=jaeger
+      - NRF_URI=http://nrf:9000
+      - AUSF_URI=http://ausf:9004
+      - UDM_URI=http://udm:9005
+      - NSSF_URI=http://nssf:9010
+    depends_on:
+      - nrf
+      - ausf
+      - udm
+      - nssf
+    networks:
+      - 5g-network
+
+  smf:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: 5g-smf
+    restart: unless-stopped
+    command: python core_network/smf.py
+    ports:
+      - "9002:9002"
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017
+      - JAEGER_HOST=jaeger
+      - NRF_URI=http://nrf:9000
+      - PCF_URI=http://pcf:9006
+      - CHF_URI=http://chf:9013
+      - UDM_URI=http://udm:9005
+    depends_on:
+      - nrf
+      - pcf
+      - chf
+    networks:
+      - 5g-network
+
+  upf:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: 5g-upf
+    restart: unless-stopped
+    command: python core_network/upf.py
+    ports:
+      - "9003:9003"
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017
+      - JAEGER_HOST=jaeger
+      - NRF_URI=http://nrf:9000
+      - SMF_URI=http://smf:9002
+    depends_on:
+      - nrf
+      - smf
+    networks:
+      - 5g-network
+
+  # =============================================================================
+  # 5G Core Network Functions - Phase 7: Proxy & Exposure
+  # =============================================================================
+
+  scp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: 5g-scp
+    restart: unless-stopped
+    command: python core_network/scp.py
+    ports:
+      - "9012:9012"
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017
+      - JAEGER_HOST=jaeger
+      - NRF_URI=http://nrf:9000
+    depends_on:
+      - nrf
+    networks:
+      - 5g-network
+
+  nef:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: 5g-nef
+    restart: unless-stopped
+    command: python core_network/nef.py
+    ports:
+      - "9016:9016"
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017
+      - JAEGER_HOST=jaeger
+      - NRF_URI=http://nrf:9000
+      - PCF_URI=http://pcf:9006
+      - UDM_URI=http://udm:9005
+    depends_on:
+      - nrf
+      - pcf
+    networks:
+      - 5g-network
+
+  # =============================================================================
+  # 5G Core Network Functions - Phase 8: Interworking & Roaming
+  # =============================================================================
+
+  n3iwf:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: 5g-n3iwf
+    restart: unless-stopped
+    command: python core_network/n3iwf.py
+    ports:
+      - "9015:9015"
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017
+      - JAEGER_HOST=jaeger
+      - NRF_URI=http://nrf:9000
+      - AMF_URI=http://amf:9001
+    depends_on:
+      - nrf
+      - amf
+    networks:
+      - 5g-network
+
+  sepp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: 5g-sepp
+    restart: unless-stopped
+    command: python core_network/sepp.py
+    ports:
+      - "9014:9014"
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017
+      - JAEGER_HOST=jaeger
+      - NRF_URI=http://nrf:9000
+    depends_on:
+      - nrf
+    networks:
+      - 5g-network
+
+  # =============================================================================
+  # Radio Access Network
+  # =============================================================================
+
+  gnb:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: 5g-gnb
+    restart: unless-stopped
+    command: python ran/gnb.py
+    ports:
+      - "9100:9100"
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017
+      - JAEGER_HOST=jaeger
+      - AMF_URI=http://amf:9001
+    depends_on:
+      - amf
+    networks:
+      - 5g-network
+
+networks:
+  5g-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  mongodb_data:
+  prometheus_data:

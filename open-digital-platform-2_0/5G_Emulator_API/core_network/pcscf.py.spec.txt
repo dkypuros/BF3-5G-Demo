@@ -1,0 +1,391 @@
+================================================================================
+                    SPECIFICATION MAP: pcscf.py
+         Proxy Call Session Control Function - Spec Reference Bridge
+================================================================================
+
+Source File: 5G_Emulator_API/core_network/pcscf.py
+Generated:   2026-01-10
+Lines:       658
+Purpose:     Map each code section to governing 3GPP specifications
+Based On:    Kamailio ims_registrar_pcscf module
+
+================================================================================
+PRIMARY GOVERNING SPECIFICATIONS
+================================================================================
+
+3GPP TS 24.229 - IP Multimedia Call Control Protocol
+  Location: 90_Work-Telco/3GPP/Rel-19/24_series/24229-j41.doc
+  Scope: SIP-based call control procedures for IMS
+  Key Sections:
+    - Section 5.1: P-CSCF procedures
+    - Section 5.2: Registration procedures
+    - Section 5.4: Call initiation procedures
+
+3GPP TS 29.214 - Policy and Charging Control over Rx Interface
+  Location: 90_Work-Telco/3GPP/Rel-19/29_series/29214-j20.docx
+  Scope: Rx interface between P-CSCF and PCRF/PCF for QoS
+  Key Sections:
+    - Section 4: Rx reference point
+    - Section 5: Rx protocol procedures (AAR, AAA, STR, STA)
+
+3GPP TS 33.203 - Access Security for IP-based Services
+  Location: 90_Work-Telco/3GPP/Rel-19/33_series/ (if available)
+  Scope: IMS security architecture, IPSec-3GPP
+  Key Sections:
+    - Section 6: Security mechanisms (AKA, IPSec)
+
+3GPP TS 23.228 - IP Multimedia Subsystem (IMS) Architecture
+  Location: 90_Work-Telco/3GPP/Rel-19/23_series/23228-j50.docx
+  Scope: Overall IMS architecture, P-CSCF role
+  Key Sections:
+    - Section 4.2: P-CSCF functional description
+
+KAMAILIO SOURCE REFERENCE:
+  Module: kamailio/src/modules/ims_registrar_pcscf/
+  Key Files: save.c, service_routes.c, ul_callback.c
+  Module: kamailio/src/modules/ims_usrloc_pcscf/
+  Key Files: pcontact.h, pcontact.c, usrloc.c
+
+
+================================================================================
+LINE-BY-LINE SPECIFICATION MAPPING
+================================================================================
+
+
+LINES 1-25: MODULE HEADER AND FASTAPI SETUP
+--------------------------------------------------------------------------------
+
+Lines 1-4: Module Documentation
+  Reference: Kamailio ims_registrar_pcscf module header
+  3GPP Spec: TS 24.229 Section 5.1 (P-CSCF)
+
+Lines 6-15: Imports
+  - FastAPI: HTTP server framework
+  - Pydantic: Data validation (maps to SIP message validation)
+  - uuid: Call-ID and contact-id generation
+  - hashlib/hmac: Authentication challenge generation
+
+Lines 21-25: FastAPI Application
+  Spec: TS 24.229 Section 5.1.1 - P-CSCF is first point of contact
+  Description text references TS 24.229 compliance
+
+
+LINES 27-88: DATA MODELS
+--------------------------------------------------------------------------------
+
+Lines 31-37: class RegistrationState(Enum)
+  Spec: TS 24.229 Section 5.2.2 - Registration states
+  Kamailio: ims_registrar_pcscf/reg_mod.h - PCONTACT_* flags
+
+  States mapping:
+    - NOT_REGISTERED: Initial state
+    - REGISTERED: Successfully registered (PCONTACT_REGISTERED)
+    - REG_PENDING: Awaiting response from I-CSCF
+    - REG_PENDING_AAR: Awaiting AAR response from PCRF
+    - DEREGISTERED: Explicit de-registration
+
+Lines 39-45: class SecurityMechanism(Enum)
+  Spec: TS 33.203 Section 6.1 - Security mechanisms
+  Spec: TS 24.229 Section 5.1.1.2 - Security-Client header
+
+  Mechanisms:
+    - IPSEC_3GPP: TS 33.203 mandatory mechanism
+    - TLS: Alternative transport security
+    - DIGEST: HTTP Digest authentication
+    - DIGEST_AKAV1_MD5: AKA v1 per TS 33.203
+    - DIGEST_AKAV2_MD5: AKA v2 per TS 33.203
+
+Lines 47-56: class ServiceRouteInfo, PublicIdentity
+  Spec: TS 24.229 Section 5.2.2.1.1 - Service-Route header
+  Spec: TS 24.229 Section 5.2.2.1.2 - P-Associated-URI header
+
+  ServiceRouteInfo: Received in 200 OK, stored for routing
+  PublicIdentity: IMPU (sip:user@domain or tel:+number)
+
+Lines 58-68: class SecurityAssociation
+  Spec: TS 33.203 Section 6.3 - IPSec Security Association
+  Kamailio: ims_ipsec_pcscf/ipsec.h
+
+  Fields per TS 33.203:
+    - spi_c/spi_s: Security Parameter Index (client/server)
+    - port_c/port_s: Protected ports
+    - ealg: Encryption algorithm (aes-cbc)
+    - alg: Integrity algorithm (hmac-sha1-96)
+    - ck/ik: Cipher key / Integrity key from AKA
+
+Lines 69-88: class ContactBinding
+  Spec: TS 24.229 Section 5.2.2.1 - Contact information
+  Kamailio: ims_usrloc_pcscf/pcontact.h - pcontact_t structure
+
+  Mapping to Kamailio pcontact_t:
+    - aor → aor (Address of Record)
+    - received_host/port → received_host, received_port
+    - via_host/port → via_host, via_port, via_prot
+    - expires → expires
+    - public_ids → service_routes (linked list in Kamailio)
+    - security_assoc → security (ipsec_t in Kamailio)
+
+
+LINES 89-136: SIP MESSAGE MODELS
+--------------------------------------------------------------------------------
+
+Lines 89-107: class SIPRequest
+  Spec: RFC 3261 - SIP: Session Initiation Protocol
+  Spec: TS 24.229 - IMS-specific headers
+
+  Standard SIP headers (RFC 3261):
+    - method, request_uri, from_uri, to_uri, call_id, cseq, via, contact
+
+  IMS-specific headers (TS 24.229):
+    - authorization: TS 24.229 Section 5.1.1.2 (authentication)
+    - security_client: TS 33.203 (IPSec negotiation)
+    - p_access_network_info: TS 24.229 Section 7.2A.4
+
+Lines 108-124: class SIPResponse
+  Spec: RFC 3261 Section 7.2 - Responses
+  Spec: TS 24.229 Section 5.2.2.1 - 200 OK for REGISTER
+
+  IMS-specific response headers:
+    - service_route: TS 24.229 Section 5.2.2.1.1
+    - p_associated_uri: TS 24.229 Section 5.2.2.1.2
+    - security_server: TS 33.203 Section 6.3
+
+Lines 125-136: class RxSessionInfo
+  Spec: TS 29.214 Section 5.6 - Rx session
+
+  Fields per TS 29.214:
+    - session_id: Diameter Session-Id AVP
+    - impu: Subscription-Id AVP
+    - media_type: Media-Type AVP
+    - bandwidth_ul/dl: Max-Requested-Bandwidth AVPs
+    - qci: QoS-Class-Identifier (TS 23.203)
+
+
+LINES 137-194: USER LOCATION STORAGE (USRLOC)
+--------------------------------------------------------------------------------
+
+Lines 141-191: class PCscfUsrLoc
+  Spec: TS 24.229 Section 5.2.2 - Contact storage
+  Kamailio: ims_usrloc_pcscf/usrloc.c
+
+  Methods mapping to Kamailio:
+
+  save_contact() → ul_update_pcontact() in usrloc.c
+    Spec: TS 24.229 Section 5.2.2.1 - Store registration
+
+  lookup_contact() → ul_get_pcontact() in usrloc.c
+    Spec: TS 24.229 Section 5.2.2.3 - Lookup for routing
+
+  lookup_by_received() → ul_get_pcontact_by_src() in usrloc.c
+    Spec: TS 24.229 Section 5.2.6 - NAT handling
+
+  delete_contact() → ul_delete_pcontact() in usrloc.c
+    Spec: TS 24.229 Section 5.2.2.2 - De-registration
+
+
+LINES 195-218: P-CSCF CONFIGURATION
+--------------------------------------------------------------------------------
+
+Lines 199-217: class PCscfConfig
+  Spec: TS 24.229 Section 5.1.1 - P-CSCF configuration
+  Kamailio: pcscf.cfg configuration file
+
+  Parameters:
+    - pcscf_uri: P-CSCF SIP URI (TS 24.229 Section 5.1.1.1)
+    - pending_reg_expires: Timer for pending registration
+    - default/min/max_expires: Registration timer bounds
+    - icscf_uri: Next hop for REGISTER (TS 24.229 Section 5.2.2)
+    - realm: Authentication realm (TS 24.229 Section 5.1.1.2)
+    - ipsec_enabled: TS 33.203 compliance
+    - pcrf_uri: Rx interface endpoint (TS 29.214)
+
+
+LINES 219-300: CORE FUNCTIONS
+--------------------------------------------------------------------------------
+
+Lines 223-226: generate_nonce()
+  Spec: RFC 2617 - HTTP Digest Authentication
+  Spec: TS 33.203 - Challenge generation for AKA
+
+  Generates nonce for WWW-Authenticate header
+
+Lines 227-260: parse_via_header()
+  Spec: RFC 3261 Section 20.42 - Via header
+  Spec: RFC 3581 - rport extension
+
+  Extracts:
+    - received parameter: Actual source IP (NAT traversal)
+    - rport parameter: Actual source port
+
+Lines 262-278: extract_public_ids_from_p_associated_uri()
+  Spec: TS 24.229 Section 5.2.2.1.2 - P-Associated-URI
+
+  Parses P-Associated-URI header from 200 OK
+  First URI is default public identity
+
+Lines 279-300: send_rx_aar()
+  Spec: TS 29.214 Section 5.6.1 - AA-Request procedure
+  Kamailio: ims_qos/rx_aar.c
+
+  Sends AAR to PCRF for:
+    - QoS authorization
+    - Bearer establishment for IMS signaling (QCI 5)
+    - Media session QoS (QCI 1 for VoLTE)
+
+
+LINES 301-418: SIP REGISTER HANDLER
+--------------------------------------------------------------------------------
+
+Lines 305-418: handle_register()
+  Spec: TS 24.229 Section 5.2.2 - P-CSCF registration procedures
+  Kamailio: ims_registrar_pcscf/save.c - pcscf_save()
+
+  Procedure per TS 24.229 Section 5.2.2:
+
+  Lines 317-326: Via parsing and NAT detection
+    Spec: RFC 3261 Section 18 - Via handling
+    Spec: RFC 3581 - rport for NAT
+
+  Lines 328-336: Security-Client processing
+    Spec: TS 33.203 Section 6.3 - IPSec negotiation
+    Spec: TS 24.229 Section 5.1.1.2.1
+
+  Lines 339-356: De-registration (Expires: 0)
+    Spec: TS 24.229 Section 5.2.2.2 - User-initiated de-registration
+    Kamailio: pcscf_unregister() in save.c
+
+  Lines 358-378: Create pending registration
+    Spec: TS 24.229 Section 5.2.2.1 - Registration state machine
+    Kamailio: pcscf_save_pending() in save.c
+
+  Lines 380-394: Simulate successful registration
+    Spec: TS 24.229 Section 5.2.2.1.1 - 200 OK processing
+    Note: In production, waits for I-CSCF/S-CSCF response
+
+  Lines 399-418: Build 200 OK response
+    Spec: TS 24.229 Section 5.2.2.1.1 - Response headers
+    Headers:
+      - Service-Route: Section 5.2.2.1.1
+      - P-Associated-URI: Section 5.2.2.1.2
+      - Path: Section 5.2.2.1 (for routing back)
+      - Security-Server: TS 33.203 (if IPSec)
+
+
+LINES 420-517: SIP INVITE AND MESSAGE HANDLERS
+--------------------------------------------------------------------------------
+
+Lines 420-474: handle_invite()
+  Spec: TS 24.229 Section 5.4.3 - Mobile Originating call
+  Kamailio: Route logic in pcscf.cfg
+
+  Procedure per TS 24.229 Section 5.4.3.2:
+
+  Lines 429-441: Registration check
+    Spec: TS 24.229 Section 5.4.3.2 step 1 - Verify registration
+
+  Lines 447-448: P-Asserted-Identity
+    Spec: TS 24.229 Section 5.4.3.2 step 3 - Assert identity
+    Spec: RFC 3325 - P-Asserted-Identity header
+
+  Lines 453-463: Rx session for media
+    Spec: TS 29.214 Section 5.6.2 - AAR for media
+    QCI 1 for voice per TS 23.203
+
+Lines 476-517: handle_sip_message()
+  Spec: TS 24.229 Section 5.4 - Call control
+  Generic handler routes to specific methods
+
+
+LINES 519-573: MANAGEMENT APIs
+--------------------------------------------------------------------------------
+
+Lines 523-555: Contact management endpoints
+  Spec: Internal/operational (not 3GPP specified)
+  Kamailio: Similar to ul_dump_* functions in usrloc
+
+  Endpoints:
+    - GET /contacts: List all registrations
+    - GET /contacts/{id}: Get specific contact
+    - DELETE /contacts/{id}: Administrative removal
+
+Lines 557-572: Rx session management
+  Spec: TS 29.214 Section 5.6 - Session lifecycle
+
+  Endpoints:
+    - GET /rx-sessions: List active QoS sessions
+    - POST /rx-sessions/{id}/terminate: Send STR to PCRF
+
+
+LINES 574-614: IPSEC SECURITY ASSOCIATION MANAGEMENT
+--------------------------------------------------------------------------------
+
+Lines 578-600: setup_ipsec_sa()
+  Spec: TS 33.203 Section 6.3 - SA establishment
+  Kamailio: ims_ipsec_pcscf/ipsec.c
+
+  Parameters per TS 33.203:
+    - spi_c/spi_s: Negotiated in Security-Client/Server
+    - ck: Cipher Key from AKA (128 bits)
+    - ik: Integrity Key from AKA (128 bits)
+
+Lines 602-613: teardown_ipsec_sa()
+  Spec: TS 33.203 Section 6.4 - SA teardown
+  Triggered on de-registration or timeout
+
+
+LINES 615-658: HEALTH AND STARTUP
+--------------------------------------------------------------------------------
+
+Lines 619-639: root endpoint (/)
+  Returns P-CSCF status including:
+    - Configuration (URI, realm)
+    - Feature flags (IPSec, TLS, Rx)
+    - Statistics (contacts, sessions)
+
+Lines 641-644: health endpoint (/health)
+  Standard health check for orchestration
+
+Lines 650-657: Main entry point
+  Starts uvicorn server on port 9030
+  Spec: P-CSCF typically on SIP port 5060
+        Port 9030 used for HTTP API in emulator
+
+
+================================================================================
+SPECIFICATION CROSS-REFERENCE TABLE
+================================================================================
+
+| Code Section          | Primary Spec      | Section        |
+|-----------------------|-------------------|----------------|
+| RegistrationState     | TS 24.229         | 5.2.2          |
+| SecurityMechanism     | TS 33.203         | 6.1            |
+| SecurityAssociation   | TS 33.203         | 6.3            |
+| ContactBinding        | TS 24.229         | 5.2.2.1        |
+| SIPRequest/Response   | RFC 3261          | 7, 20          |
+| RxSessionInfo         | TS 29.214         | 5.6            |
+| PCscfUsrLoc           | TS 24.229         | 5.2.2          |
+| handle_register       | TS 24.229         | 5.2.2          |
+| handle_invite         | TS 24.229         | 5.4.3          |
+| send_rx_aar           | TS 29.214         | 5.6.1          |
+| setup_ipsec_sa        | TS 33.203         | 6.3            |
+
+
+================================================================================
+KAMAILIO SOURCE MAPPING
+================================================================================
+
+| Python Class/Function  | Kamailio File              | Function/Struct    |
+|------------------------|----------------------------|--------------------|
+| ContactBinding         | pcontact.h                 | pcontact_t         |
+| PCscfUsrLoc            | usrloc.c                   | ul_* functions     |
+| save_contact           | save.c                     | pcscf_save()       |
+| lookup_contact         | usrloc.c                   | ul_get_pcontact()  |
+| handle_register        | save.c                     | pcscf_save()       |
+| SecurityAssociation    | ipsec.h                    | ipsec_t            |
+| setup_ipsec_sa         | ipsec.c                    | add_sa()           |
+| send_rx_aar            | rx_aar.c                   | rx_send_aar()      |
+
+
+================================================================================
+                              END OF DOCUMENT
+================================================================================

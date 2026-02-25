@@ -1,0 +1,820 @@
+================================================================================
+SPECIFICATION MAP: upf_enhanced.py
+User Plane Function (UPF) - Enhanced Implementation
+================================================================================
+
+File: 5G_Emulator_API/core_network/upf_enhanced.py
+Lines: 1041
+Primary Role: User plane packet processing, GTP-U tunneling, QoS enforcement
+Interface: N4 (to SMF via PFCP), N3 (to gNB via GTP-U), N6 (to Data Network)
+
+================================================================================
+PRIMARY GOVERNING SPECIFICATIONS
+================================================================================
+
+1. 3GPP TS 29.244 - Interface between Control Plane and User Plane Nodes
+   Your file: 90_Work-Telco/3GPP/Rel-19/29_series/29244-j30.zip
+   Coverage: PFCP message types, IEs, session management
+
+2. 3GPP TS 29.281 - General Packet Radio System (GPRS) Tunnelling Protocol
+   User Plane (GTPv1-U)
+   Your file: 90_Work-Telco/3GPP/Rel-19/29_series/29281-j20.zip
+   Coverage: GTP-U header format, message types, tunnel management
+
+3. 3GPP TS 23.501 - System Architecture for the 5G System
+   Your file: 90_Work-Telco/3GPP/Rel-19/23_series/23501-j40.zip
+   Coverage: 5QI definitions, QoS framework, UPF functional description
+
+4. 3GPP TS 29.510 - Network Function Repository Services
+   Your file: 90_Work-Telco/3GPP/Rel-19/29_series/29510-j40.zip
+   YAML: 90_Work-Telco/3GPP/Rel-19/29_series/29510_OpenAPI/TS29510_Nnrf_NFManagement.yaml
+   Coverage: NF registration for UPF discovery
+
+================================================================================
+LINE-BY-LINE SPECIFICATION MAPPING
+================================================================================
+
+--------------------------------------------------------------------------------
+LINES 1-5: Header Comments and Compliance Declaration
+--------------------------------------------------------------------------------
+Claims: TS 29.244 (PFCP), TS 29.281 (GTP-U), IPv6 Support, Advanced QoS
+Specifications:
+  - 3GPP TS 29.244 Section 1 - Scope: "This specification defines the PFCP
+    protocol that is used between the CP function and UP function"
+  - 3GPP TS 29.281 Section 1 - Scope: "This document specifies the GTP-U
+    protocol used for user plane PDU transport"
+  - RFC 8200 - Internet Protocol Version 6 (IPv6) Specification
+
+--------------------------------------------------------------------------------
+LINES 6-28: Imports and OpenTelemetry Setup
+--------------------------------------------------------------------------------
+- FastAPI, Pydantic: Python web framework (not 3GPP specific)
+- struct, socket, ipaddress: Network data handling
+- OpenTelemetry tracer: Distributed tracing (OpenTelemetry spec)
+
+Specifications:
+  - OpenTelemetry Specification: https://opentelemetry.io/docs/specs/
+  - IETF RFC 3339 (datetime): ISO 8601 timestamp format
+
+--------------------------------------------------------------------------------
+LINES 33-56: MessageType Enum (PFCP Message Types)
+--------------------------------------------------------------------------------
+Code:
+  HEARTBEAT_REQUEST = 1
+  HEARTBEAT_RESPONSE = 2
+  ...
+  SESSION_ESTABLISHMENT_REQUEST = 50
+  SESSION_ESTABLISHMENT_RESPONSE = 51
+  ...
+
+Specification: 3GPP TS 29.244 Section 7.2 - Message Types
+  Table 7.2.1-1: Message Types
+  +--------+----------------------------------------+
+  | Value  | Message Type                           |
+  +--------+----------------------------------------+
+  |   1    | Heartbeat Request                      |
+  |   2    | Heartbeat Response                     |
+  |   3    | PFD Management Request                 |
+  |   4    | PFD Management Response                |
+  |   5    | Association Setup Request              |
+  |   6    | Association Setup Response             |
+  |   7    | Association Update Request             |
+  |   8    | Association Update Response            |
+  |   9    | Association Release Request            |
+  |  10    | Association Release Response           |
+  |  11    | Version Not Supported Response         |
+  |  12    | Node Report Request                    |
+  |  13    | Node Report Response                   |
+  |  50    | Session Establishment Request          |
+  |  51    | Session Establishment Response         |
+  |  52    | Session Modification Request           |
+  |  53    | Session Modification Response          |
+  |  54    | Session Deletion Request               |
+  |  55    | Session Deletion Response              |
+  |  56    | Session Report Request                 |
+  |  57    | Session Report Response                |
+  +--------+----------------------------------------+
+
+Compliance: EXACT MATCH - All message type values align with TS 29.244
+
+--------------------------------------------------------------------------------
+LINES 58-73: Cause Enum (PFCP Cause Values)
+--------------------------------------------------------------------------------
+Code:
+  REQUEST_ACCEPTED = 1
+  REQUEST_REJECTED = 64
+  SESSION_CONTEXT_NOT_FOUND = 65
+  ...
+
+Specification: 3GPP TS 29.244 Section 8.2.1 - Cause
+  Table 8.2.1-1: Cause values
+  +-------+----------------------------------------+
+  | Value | Cause                                  |
+  +-------+----------------------------------------+
+  |   1   | Request accepted                       |
+  |  64   | Request rejected                       |
+  |  65   | Session context not found              |
+  |  66   | Mandatory IE missing                   |
+  |  67   | Conditional IE missing                 |
+  |  68   | Invalid length                         |
+  |  69   | Mandatory IE incorrect                 |
+  |  70   | Invalid Forwarding Policy              |
+  |  71   | Invalid F-TEID allocation option       |
+  |  72   | No established PFCP Association        |
+  |  73   | Rule creation/modification failure     |
+  |  74   | PFCP entity in congestion              |
+  |  75   | No resources available                 |
+  |  76   | Service not supported                  |
+  |  77   | System failure                         |
+  +-------+----------------------------------------+
+
+Compliance: EXACT MATCH - Cause values directly from TS 29.244
+
+--------------------------------------------------------------------------------
+LINES 75-83: OuterHeaderCreation Model
+--------------------------------------------------------------------------------
+Specification: 3GPP TS 29.244 Section 8.2.56 - Outer Header Creation
+  "This IE shall be present if the UP function is required to insert an
+   outer header on outgoing packets."
+
+Fields mapped:
+  - outer_header_creation_description: 8.2.56 - Outer Header Creation Description
+  - teid: GTP-U TEID for encapsulation
+  - ipv4_address/ipv6_address: Destination tunnel endpoint
+  - port_number: UDP port (default 2152 for GTP-U)
+  - c_tag/s_tag: VLAN tagging (Ethernet scenarios)
+
+Reference: TS 29.281 Section 5.1 - Port for GTP-U is 2152
+
+--------------------------------------------------------------------------------
+LINES 84-91: FTeid Model (Fully Qualified TEID)
+--------------------------------------------------------------------------------
+Specification: 3GPP TS 29.244 Section 8.2.3 - F-TEID
+  "The F-TEID IE shall identify a specific user plane tunnel endpoint."
+
+  Bits layout per spec:
+  - V4/V6 flags: Indicate presence of IPv4/IPv6 address
+  - TEID: Tunnel Endpoint Identifier (32 bits)
+  - IPv4 Address: When V4=1 (32 bits)
+  - IPv6 Address: When V6=1 (128 bits)
+  - Choose ID: For CHOOSE option (8 bits)
+
+Cross-reference: 3GPP TS 29.281 Section 5.1 - TEID format definition
+
+--------------------------------------------------------------------------------
+LINES 92-99: UeIpAddress Model
+--------------------------------------------------------------------------------
+Specification: 3GPP TS 29.244 Section 8.2.62 - UE IP Address
+  "This IE shall contain the UE IP address allocated by the 5GC."
+
+Fields:
+  - v4/v6 flags: Indicate address type presence
+  - s_d flag: Source/Destination indication
+  - ipv6_prefix_delegation_bits: IPv6 prefix length for delegation
+
+Reference: RFC 3633 - IPv6 Prefix Options for DHCPv6
+
+--------------------------------------------------------------------------------
+LINES 100-106: Sdf Model (Service Data Flow Filter)
+--------------------------------------------------------------------------------
+Specification: 3GPP TS 29.244 Section 8.2.5 - SDF Filter
+  "The SDF Filter IE shall be present when the traffic detection is to be
+   performed on the 5-tuple."
+
+  Flow Description format per TS 23.503:
+    "permit in ip from any to 10.0.0.0/8"
+
+Fields:
+  - flow_description: 5-tuple filter (IPFilterRule, RFC 3588 format)
+  - tos_traffic_class: Type of Service/Traffic Class
+  - security_parameter_index: IPsec SPI
+  - flow_label: IPv6 Flow Label
+
+--------------------------------------------------------------------------------
+LINES 107-123: Pdi Model (Packet Detection Information)
+--------------------------------------------------------------------------------
+Specification: 3GPP TS 29.244 Section 8.2.38 - Packet Detection Information
+  "The PDI IE contains information that instructs the UP function to detect
+   the traffic to be matched."
+
+  Required IE:
+  - Source Interface (Table 8.2.38-1)
+
+  Optional IEs:
+  - F-TEID (local F-TEID)
+  - Network Instance (DNN/APN)
+  - UE IP Address
+  - Traffic Endpoint ID
+  - SDF Filter (multiple allowed)
+  - Application ID (per TS 29.244 Section 5.4.4)
+  - QFI (QoS Flow Identifier, TS 23.501)
+  - Framed Route/IPv6 Route (per RFC 2865)
+
+Source Interface values (Table 8.2.2-1):
+  0 - Access (N3 interface)
+  1 - Core (N6 interface)
+  2 - SGi-LAN
+  3 - CP-function
+
+--------------------------------------------------------------------------------
+LINES 124-135: ForwardingParameters Model
+--------------------------------------------------------------------------------
+Specification: 3GPP TS 29.244 Section 8.2.50 - Forwarding Parameters
+  "This IE shall be present if the Apply Action requires the UP function
+   to forward the packets."
+
+Fields:
+  - destination_interface: Where to forward (Core=1, Access=0)
+  - network_instance: Target network (DNN)
+  - redirect_information: HTTP redirect handling
+  - outer_header_creation: GTP-U encapsulation
+  - transport_level_marking: DSCP marking
+  - forwarding_policy: Policy identifier
+  - header_enrichment: HTTP header insertion
+
+Reference: TS 29.244 Section 5.2.3 - Forwarding action semantics
+
+--------------------------------------------------------------------------------
+LINES 136-144: CreatePdr Model (Packet Detection Rule)
+--------------------------------------------------------------------------------
+Specification: 3GPP TS 29.244 Section 7.5.2.2 - Create PDR IE
+  "The Create PDR IE shall be present if the CP function requests the
+   UP function to create a new PDR."
+
+  Mandatory IEs:
+  - PDR ID (8.2.36)
+  - Precedence (8.2.37)
+  - PDI (8.2.38)
+
+  Optional IEs:
+  - Outer Header Removal (8.2.39)
+  - FAR ID (8.2.47) - Link to FAR
+  - URR ID (8.2.54) - Link to URR(s)
+  - QER ID (8.2.89) - Link to QER(s)
+  - Activate Predefined Rules (8.2.99)
+
+Precedence semantics: Lower value = higher priority (TS 29.244 Section 5.2.1)
+
+--------------------------------------------------------------------------------
+LINES 146-152: CreateFar Model (Forwarding Action Rule)
+--------------------------------------------------------------------------------
+Specification: 3GPP TS 29.244 Section 7.5.2.3 - Create FAR IE
+
+  Mandatory IEs:
+  - FAR ID (8.2.47)
+  - Apply Action (8.2.48)
+
+Apply Action flags (Table 8.2.48-1):
+  Bit 0: DROP
+  Bit 1: FORW (Forward)
+  Bit 2: BUFF (Buffer)
+  Bit 3: NOCP (Notify CP)
+  Bit 4: DUPL (Duplicate)
+
+  Optional IEs:
+  - Forwarding Parameters (when FORW=1)
+  - Duplicating Parameters (when DUPL=1)
+  - BAR ID (for buffering association)
+
+--------------------------------------------------------------------------------
+LINES 153-176: GateStatus, Mbr, Gbr Models
+--------------------------------------------------------------------------------
+Specification: 3GPP TS 29.244 Section 8.2.90 - Gate Status
+  "The Gate Status IE shall indicate whether the UP function shall allow
+   or block packets in the uplink/downlink direction."
+
+Gate values:
+  - OPEN: Packets allowed
+  - CLOSED: Packets blocked
+
+MBR/GBR per 3GPP TS 23.501 Section 5.7.2.6:
+  - MBR (Maximum Bit Rate): Upper bound, excess dropped
+  - GBR (Guaranteed Bit Rate): Minimum reserved rate
+
+Units: bits per second (bps)
+
+--------------------------------------------------------------------------------
+LINES 165-177: CreateQer Model (QoS Enforcement Rule)
+--------------------------------------------------------------------------------
+Specification: 3GPP TS 29.244 Section 7.5.2.6 - Create QER IE
+
+  Mandatory IEs:
+  - QER ID (8.2.89)
+  - Gate Status (8.2.90)
+
+  Optional IEs:
+  - QER Correlation ID (8.2.91)
+  - MBR (8.2.92)
+  - GBR (8.2.93)
+  - Packet Rate (8.2.94)
+  - DL Flow Level Marking (8.2.95)
+  - QFI (8.2.96)
+  - RQI (8.2.97) - Reflective QoS Indication
+  - Paging Policy Indicator (8.2.98)
+  - Averaging Window (8.2.122)
+
+Reference: TS 23.501 Section 5.7.3.4 - QoS Enforcement at UPF
+
+--------------------------------------------------------------------------------
+LINES 178-200: CreateUrr Model (Usage Reporting Rule)
+--------------------------------------------------------------------------------
+Specification: 3GPP TS 29.244 Section 7.5.2.4 - Create URR IE
+
+  Mandatory IEs:
+  - URR ID (8.2.54)
+  - Measurement Method (8.2.55)
+  - Reporting Triggers (8.2.56)
+
+  Measurement Method (Table 8.2.55-1):
+  - Bit 0: DURAT (Duration measurement)
+  - Bit 1: VOLUM (Volume measurement)
+  - Bit 2: EVENT (Event-based reporting)
+
+  Reporting Triggers include:
+  - Volume threshold reached
+  - Time threshold reached
+  - Linked URR reporting
+  - Start/Stop of traffic detection
+
+Reference: 3GPP TS 32.255 - Charging management; 5G data connectivity charging
+
+--------------------------------------------------------------------------------
+LINES 201-214: PfcpSessionEstablishmentRequest Model
+--------------------------------------------------------------------------------
+Specification: 3GPP TS 29.244 Section 7.5.2 - PFCP Session Establishment Request
+
+  Message structure (Table 7.5.2.1-1):
+  +---------------------------+--------+
+  | Information Element       | Type   |
+  +---------------------------+--------+
+  | Node ID                   | M      |
+  | F-SEID                    | M      |
+  | Create PDR                | M      |
+  | Create FAR                | M      |
+  | Create URR                | O      |
+  | Create QER                | O      |
+  | Create BAR                | O      |
+  | Create Traffic Endpoint   | O      |
+  | PDN Type                  | O      |
+  | User Plane Inactivity Tmr | O      |
+  | User ID                   | O      |
+  | Trace Information         | O      |
+  +---------------------------+--------+
+
+  M = Mandatory, O = Optional
+
+--------------------------------------------------------------------------------
+LINES 215-232: GtpuHeader Model
+--------------------------------------------------------------------------------
+Specification: 3GPP TS 29.281 Section 5.1 - General Format
+
+  GTP-U Header Structure (Figure 5.1-1):
+  +--+--+--+--+--+--+--+--+
+  |Version|PT| *| E| S|PN|  Octet 1
+  +--+--+--+--+--+--+--+--+
+  |    Message Type       |  Octet 2
+  +--+--+--+--+--+--+--+--+
+  |    Length (2 octets)  |  Octets 3-4
+  +--+--+--+--+--+--+--+--+
+  |    TEID (4 octets)    |  Octets 5-8
+  +--+--+--+--+--+--+--+--+
+  | Sequence Number (opt) |  Octets 9-10 (if S=1)
+  +--+--+--+--+--+--+--+--+
+  |  N-PDU Number (opt)   |  Octet 11 (if PN=1)
+  +--+--+--+--+--+--+--+--+
+  | Next Ext Header (opt) |  Octet 12 (if E=1)
+  +--+--+--+--+--+--+--+--+
+
+  Version: 1 (GTPv1-U)
+  PT: Protocol Type (1 = GTP)
+  Message Type 255: G-PDU (user data)
+
+Field compliance:
+  - version=1: Correct for GTPv1-U
+  - pt=1: Protocol Type (1=GTP, 0=GTP')
+  - message_type=255: G-PDU (Table 6-1 in TS 29.281)
+
+--------------------------------------------------------------------------------
+LINES 233-252: QosParameters and TrafficStats Models
+--------------------------------------------------------------------------------
+QosParameters fields per 3GPP TS 23.501 Section 5.7.2:
+  - fiveqi: 5G QoS Identifier (Table 5.7.4-1)
+  - priority_level: Allocation and Retention Priority
+  - packet_delay_budget: Maximum latency (ms)
+  - packet_error_rate: Maximum error rate
+  - maximum_data_burst_volume: For non-GBR flows
+  - averaging_window: Time window for rate enforcement
+  - maximum_bitrate_ul/dl: MBR per direction
+  - guaranteed_bitrate_ul/dl: GBR per direction
+
+TrafficStats: Implementation-specific metrics for observability
+Reference: 3GPP TS 32.425 - Performance measurements
+
+--------------------------------------------------------------------------------
+LINES 263-308: UPF_Enhanced Class Initialization
+--------------------------------------------------------------------------------
+Node ID format (line 267):
+  "upf.mnc001.mcc001.3gppnetwork.org"
+
+Specification: 3GPP TS 23.003 Section 19.4.2.4 - Home Network Realm
+  Format: nf.5gc.mnc<MNC>.mcc<MCC>.3gppnetwork.org
+
+IP Pool Initialization (lines 271-274):
+  - IPv4: 192.168.100.0/24 (RFC 1918 private addressing)
+  - IPv6: 2001:db8:5g::/48 (RFC 3849 documentation prefix)
+
+Note: Production would use operator-assigned address space.
+
+--------------------------------------------------------------------------------
+LINES 282-307: Default QoS Configuration (_initialize_default_qos)
+--------------------------------------------------------------------------------
+Specification: 3GPP TS 23.501 Table 5.7.4-1 - Standardized 5QI to QoS
+characteristics mapping
+
+This is a CRITICAL table that maps 5QI values to QoS characteristics:
+
++-----+----------+--------+--------------+----------------+
+| 5QI | Priority | Delay  | Error Rate   | Use Case       |
++-----+----------+--------+--------------+----------------+
+|  1  |    20    | 100ms  |   10^-2      | Conversational |
+|     |          |        |              | Voice          |
++-----+----------+--------+--------------+----------------+
+|  2  |    40    | 150ms  |   10^-3      | Conversational |
+|     |          |        |              | Video          |
++-----+----------+--------+--------------+----------------+
+|  3  |    30    |  50ms  |   10^-3      | Real-time      |
+|     |          |        |              | Gaming         |
++-----+----------+--------+--------------+----------------+
+|  4  |    50    | 300ms  |   10^-6      | Non-conv Video |
++-----+----------+--------+--------------+----------------+
+|  5  |    10    | 100ms  |   10^-6      | IMS Signalling |
++-----+----------+--------+--------------+----------------+
+|  6  |    60    | 300ms  |   10^-6      | Video Buffered |
+|     |          |        |              | Streaming TCP  |
++-----+----------+--------+--------------+----------------+
+|  7  |    70    | 100ms  |   10^-3      | Voice/Video    |
+|     |          |        |              | Live Streaming |
++-----+----------+--------+--------------+----------------+
+|  8  |    80    | 300ms  |   10^-6      | Video Buffered |
+|     |          |        |              | Streaming TCP  |
++-----+----------+--------+--------------+----------------+
+|  9  |    90    | 300ms  |   10^-6      | Video Buffered |
+|     |          |        |              | Streaming TCP  |
++-----+----------+--------+--------------+----------------+
+| 65  |     7    |  75ms  |   10^-2      | MCPTT Voice    |
++-----+----------+--------+--------------+----------------+
+| 66  |    20    | 100ms  |   10^-2      | Non-MC PTT     |
+|     |          |        |              | Voice          |
++-----+----------+--------+--------------+----------------+
+| 67  |    15    | 100ms  |   10^-3      | MC Video       |
++-----+----------+--------+--------------+----------------+
+| 75  |    25    |  50ms  |   10^-2      | V2X Messages   |
++-----+----------+--------+--------------+----------------+
+| 79  |    65    |  50ms  |   10^-2      | V2X w/ MDBV    |
++-----+----------+--------+--------------+----------------+
+| 80  |    68    |  10ms  |   10^-6      | Low Latency    |
+|     |          |        |              | eMBB           |
++-----+----------+--------+--------------+----------------+
+| 82  |    19    |  10ms  |   10^-4      | Discrete       |
+|     |          |        |              | Automation     |
++-----+----------+--------+--------------+----------------+
+| 83  |    22    |  10ms  |   10^-4      | Discrete Auto  |
+|     |          |        |              | (Large)        |
++-----+----------+--------+--------------+----------------+
+| 84  |    24    |  30ms  |   10^-5      | Intelligent    |
+|     |          |        |              | Transport      |
++-----+----------+--------+--------------+----------------+
+| 85  |    21    |   5ms  |   10^-5      | Electricity    |
+|     |          |        |              | Distribution   |
++-----+----------+--------+--------------+----------------+
+
+Compliance: EXACT MATCH with TS 23.501 Table 5.7.4-1
+
+--------------------------------------------------------------------------------
+LINES 309-338: IP Address Allocation (allocate_ip_address)
+--------------------------------------------------------------------------------
+Specification: 3GPP TS 29.244 Section 5.5 - UE IP Address Handling
+  "The SMF shall request the UPF to allocate a UE IP address."
+
+PDN Type values (TS 29.244 Section 8.2.41):
+  - IPV4: IPv4 address only
+  - IPV6: IPv6 prefix only
+  - IPV4V6: Dual-stack
+
+IPv6 prefix delegation:
+  Reference: RFC 8415 - DHCPv6 (Dynamic Host Configuration Protocol for IPv6)
+  Reference: RFC 3633 - IPv6 Prefix Options for DHCPv6
+  Typical prefix: /64 for UE (lines 323-334)
+
+--------------------------------------------------------------------------------
+LINES 347-373: GTP Tunnel Creation (create_gtp_tunnel)
+--------------------------------------------------------------------------------
+Specification: 3GPP TS 29.281 Section 4.4.1 - Path Management
+  "GTP tunnels are identified by the pair (IP Address, TEID)."
+
+Tunnel endpoint identification:
+  - Local TEID: Assigned by this UPF
+  - Remote TEID: Received in FAR's outer_header_creation
+  - Local IP: UPF's N3 interface address
+  - Remote IP: gNB's N3 interface address
+
+Cross-reference: 3GPP TS 23.501 Section 5.8.2 - User Plane Handling
+  "The N3 interface uses GTP-U for the user plane transport."
+
+--------------------------------------------------------------------------------
+LINES 375-409: GTP Packet Processing (process_gtp_packet)
+--------------------------------------------------------------------------------
+Specification: 3GPP TS 29.281 Section 4 - GTP-U Protocol
+  "The GTP-U protocol provides an encapsulation mechanism for user data."
+
+Processing steps:
+1. Tunnel lookup by tunnel_id
+2. Statistics update (bytes/packets per direction)
+3. QoS enforcement (rate limiting, priority queuing)
+4. Forward or drop decision
+
+Direction semantics per TS 23.501:
+  - Uplink: UE -> gNB -> UPF -> Data Network
+  - Downlink: Data Network -> UPF -> gNB -> UE
+
+--------------------------------------------------------------------------------
+LINES 411-428: QoS Policy Enforcement (enforce_qos_policies)
+--------------------------------------------------------------------------------
+Specification: 3GPP TS 23.501 Section 5.7.3.4 - QoS Enforcement at UPF
+  "The UPF enforces the authorized QoS for the QoS Flows."
+
+Enforcement includes:
+  - Gate control (allow/block)
+  - Rate limiting (MBR enforcement)
+  - Rate policing (GBR verification)
+  - Marking (DSCP setting)
+
+Reference: RFC 2475 - An Architecture for Differentiated Services
+
+--------------------------------------------------------------------------------
+LINES 430-516: QosScheduler Class (Token Bucket and Priority Queuing)
+--------------------------------------------------------------------------------
+Token Bucket Algorithm (lines 437-481):
+  Specification: RFC 2697 - A Single Rate Three Color Marker
+  Specification: RFC 2698 - A Two Rate Three Color Marker
+
+  Implementation:
+  - Bucket refills at rate = max_bitrate
+  - Packet forwarded if bucket >= packet_size
+  - Packet dropped if bucket < packet_size (rate exceeded)
+
+Priority Queuing (lines 483-516):
+  Specification: 3GPP TS 23.501 Section 5.7.3 - QoS Flow
+  "QoS Flows with different 5QI shall be treated with different priorities."
+
+  Priority mapping from _get_priority_from_fiveqi follows Table 5.7.4-1
+  Lower priority number = Higher actual priority (processed first)
+
+--------------------------------------------------------------------------------
+LINES 520-592: FastAPI Lifespan (NRF Registration)
+--------------------------------------------------------------------------------
+Specification: 3GPP TS 29.510 - NF Registration
+YAML: 90_Work-Telco/3GPP/Rel-19/29_series/29510_OpenAPI/TS29510_Nnrf_NFManagement.yaml
+
+NFProfile structure (lines 523-569):
+  - nfInstanceId: UUID per TS 29.571
+  - nfType: "UPF"
+  - nfStatus: "REGISTERED"
+  - plmnList: PLMN identities served
+  - sNssais: Network slices supported
+  - nfServices: Services offered
+  - upfInfo: UPF-specific information
+
+upfInfo structure per TS 29.510 Section 6.1.6.2.46:
+  - sNssaiUpfInfoList: Slice/DNN capabilities
+  - interfaceUpfInfoList: Interface endpoints (N3, N6)
+  - pduSessionTypes: Supported PDU types
+
+Interface types (Table 6.1.6.3.7-1):
+  - N3: Access network interface
+  - N6: Data network interface
+  - N9: Inter-UPF interface
+
+--------------------------------------------------------------------------------
+LINES 641-750: PFCP Session Establishment Endpoint
+--------------------------------------------------------------------------------
+Route: POST /pfcp/v1/sessions
+Specification: 3GPP TS 29.244 Section 7.5.2 - PFCP Session Establishment
+
+Comment on line 641: "3GPP TS 29.244 Section 7.4.3.1"
+  (Note: Section number refers to older spec version, same semantics)
+
+OpenTelemetry span attributes (lines 647-651):
+  - 3gpp.interface: "N4" (Control plane interface to UPF)
+  - 3gpp.protocol: "PFCP"
+  - pfcp.node_id: SMF node identifier
+  - pfcp.f_seid: SMF's F-SEID
+
+Processing per spec Section 7.5.2.2:
+1. Validate mandatory IEs (Node ID, F-SEID, PDRs, FARs)
+2. Allocate UPF-SEID
+3. Allocate UE IP addresses from pool
+4. Install PDRs and FARs
+5. Create GTP-U tunnels
+6. Install QERs and URRs
+7. Return Session Establishment Response
+
+Response structure (lines 720-738) per Section 7.5.3:
+  - messageType: SESSION_ESTABLISHMENT_RESPONSE
+  - cause: REQUEST_ACCEPTED
+  - upFSeid: UPF's F-SEID
+  - createdPdr: List of created PDR IDs
+  - loadControlInformation: Current UPF load
+  - overloadControlInformation: Overload status
+
+--------------------------------------------------------------------------------
+LINES 752-816: PFCP Session Modification Endpoint
+--------------------------------------------------------------------------------
+Route: PATCH /pfcp/v1/sessions/{seid}
+Specification: 3GPP TS 29.244 Section 7.5.4 - PFCP Session Modification
+
+Supports:
+  - Update PDR (modify detection rules)
+  - Update FAR (modify forwarding rules)
+  - Update QER (modify QoS parameters)
+
+Use cases per spec:
+  - Handover (update tunnel endpoints)
+  - QoS modification (update rate limits)
+  - Service data flow changes
+
+--------------------------------------------------------------------------------
+LINES 818-871: PFCP Session Deletion Endpoint
+--------------------------------------------------------------------------------
+Route: DELETE /pfcp/v1/sessions/{seid}
+Specification: 3GPP TS 29.244 Section 7.5.5 - PFCP Session Deletion
+
+Cleanup operations:
+1. Release UE IP addresses back to pool
+2. Delete GTP-U tunnels
+3. Remove QoS enforcement rules
+4. Clear traffic statistics
+5. Delete session context
+
+Final statistics in span (lines 849-855):
+  - Useful for billing/charging reconciliation
+  - Reference: 3GPP TS 32.255 - Charging architecture
+
+--------------------------------------------------------------------------------
+LINES 873-914: GTP-U Packet Processing Endpoint
+--------------------------------------------------------------------------------
+Route: POST /gtp-u/process-packet
+Specification: 3GPP TS 29.281 - GTP-U Protocol
+
+Note: This is a simulation endpoint. Real GTP-U uses:
+  - UDP port 2152 (3GPP TS 29.281 Section 4.4.2.1)
+  - Binary protocol, not HTTP/JSON
+
+The endpoint simulates:
+  - Header parsing
+  - Packet forwarding logic
+  - QoS enforcement
+  - Statistics collection
+
+--------------------------------------------------------------------------------
+LINES 916-941: IPv6 Prefix Allocation Endpoint
+--------------------------------------------------------------------------------
+Route: POST /ipv6/allocate-prefix
+Specification: RFC 8415 - DHCPv6 (Section 6.3 - IA_PD)
+Reference: 3GPP TS 29.061 - Interworking between PLMN and PDN
+
+IPv6 prefix delegation enables:
+  - UE to receive /64 prefix
+  - UE can subnet further for connected devices
+  - Critical for IoT/tethering scenarios
+
+--------------------------------------------------------------------------------
+LINES 943-984: QoS Management Endpoints
+--------------------------------------------------------------------------------
+GET /qos/parameters: Retrieve all QoS rules
+POST /qos/update: Modify QoS parameters dynamically
+
+These enable:
+  - Runtime QoS adjustment
+  - Policy enforcement changes
+  - Debugging and monitoring
+
+Reference: 3GPP TS 23.503 - Policy and Charging Control
+
+--------------------------------------------------------------------------------
+LINES 986-1039: Status and Monitoring Endpoints
+--------------------------------------------------------------------------------
+GET /upf-enhanced/status: Overall UPF state
+GET /upf-enhanced/statistics: Traffic metrics
+GET /health: Health check
+
+Metrics exposed align with:
+  - 3GPP TS 28.552 - 5G Performance Measurements
+  - 3GPP TS 32.425 - Performance measurement
+
+================================================================================
+OPENTELEMETRY SPAN ATTRIBUTES USED
+================================================================================
+
+| Attribute              | Value/Type    | Source                    |
+|------------------------|---------------|---------------------------|
+| 3gpp.interface         | "N4"          | TS 23.501 Reference Point |
+| 3gpp.protocol          | "PFCP"        | TS 29.244                 |
+| pfcp.node_id           | string        | TS 29.244 Section 8.2.1   |
+| pfcp.f_seid            | string        | TS 29.244 Section 8.2.37  |
+| session.upf_seid       | UUID          | Implementation            |
+| session.allocated_ipv4 | IP address    | TS 29.244 Section 5.5     |
+| session.allocated_ipv6 | IP address    | TS 29.244 Section 5.5     |
+| session.pdrs_count     | int           | Implementation metric     |
+| session.fars_count     | int           | Implementation metric     |
+| modifications.count    | int           | Implementation metric     |
+| tunnel_id              | UUID          | Implementation            |
+| direction              | uplink/dnlink | TS 23.501 terminology     |
+| packet_size            | int (bytes)   | Implementation metric     |
+| final.packets_ul       | int           | TS 32.425 measurement     |
+| final.packets_dl       | int           | TS 32.425 measurement     |
+| final.bytes_ul         | int           | TS 32.425 measurement     |
+| final.bytes_dl         | int           | TS 32.425 measurement     |
+
+================================================================================
+PROTOCOL COMPLIANCE SUMMARY
+================================================================================
+
+PFCP (TS 29.244):
+  - Message types: FULL COMPLIANCE (all values match spec)
+  - Cause values: FULL COMPLIANCE (all values match spec)
+  - IE structures: FULL COMPLIANCE (PDR, FAR, QER, URR, PDI)
+  - Session lifecycle: FULL COMPLIANCE (establish/modify/delete)
+
+GTP-U (TS 29.281):
+  - Header format: FULL COMPLIANCE (all fields present)
+  - Message types: PARTIAL (G-PDU only, no error indication)
+  - Transport: SIMULATED (HTTP instead of UDP/2152)
+
+QoS (TS 23.501):
+  - 5QI mapping: FULL COMPLIANCE (Table 5.7.4-1 exact match)
+  - Priority levels: FULL COMPLIANCE
+  - Rate enforcement: IMPLEMENTED (token bucket)
+
+IPv6:
+  - Address allocation: IMPLEMENTED
+  - Prefix delegation: IMPLEMENTED (/64 prefixes)
+
+================================================================================
+GAPS VS FULL PRODUCTION COMPLIANCE
+================================================================================
+
+1. PFCP Transport
+   Current: HTTP/JSON simulation
+   Production: UDP binary protocol per TS 29.244 Section 7.1
+
+2. GTP-U Transport
+   Current: HTTP/JSON simulation
+   Production: UDP port 2152, binary headers per TS 29.281
+
+3. PFCP Association
+   Current: Implicit in session establishment
+   Production: Explicit PFCP Association Setup procedure
+
+4. Heartbeat
+   Current: Not implemented
+   Production: PFCP Heartbeat Request/Response required
+
+5. Usage Reporting
+   Current: URR stored but not actively reported
+   Production: Volume/time triggers send reports to SMF
+
+6. Error Indications
+   Current: Basic HTTP errors
+   Production: GTP-U Error Indication message (Type 26)
+
+================================================================================
+RELATED SPECIFICATION FILES IN YOUR LIBRARY
+================================================================================
+
+Primary:
+  90_Work-Telco/3GPP/Rel-19/29_series/29244-j30.zip (PFCP)
+  90_Work-Telco/3GPP/Rel-19/29_series/29281-j20.zip (GTP-U)
+  90_Work-Telco/3GPP/Rel-19/23_series/23501-j40.zip (5G Architecture)
+  90_Work-Telco/3GPP/Rel-19/23_series/23503-j30.zip (Policy Control)
+
+Supporting:
+  90_Work-Telco/3GPP/Rel-19/29_series/29510-j40.zip (NRF Services)
+  90_Work-Telco/3GPP/Rel-19/29_series/29571-j30.zip (Common Data Types)
+  90_Work-Telco/3GPP/Rel-19/32_series/32255-j20.zip (Charging)
+  90_Work-Telco/3GPP/Rel-19/32_series/32425-j00.zip (Performance Measurements)
+
+OpenAPI YAMLs:
+  90_Work-Telco/3GPP/Rel-19/29_series/29510_OpenAPI/TS29510_Nnrf_NFManagement.yaml
+  90_Work-Telco/3GPP/Rel-19/29_series/29244_OpenAPI/ (if available)
+
+IETF RFCs (from your Networking folder):
+  21_Networking_Public_Data/rfc/rfc8200.txt (IPv6)
+  21_Networking_Public_Data/rfc/rfc8415.txt (DHCPv6)
+  21_Networking_Public_Data/rfc/rfc2475.txt (DiffServ)
+  21_Networking_Public_Data/rfc/rfc2697.txt (Token Bucket)
+  21_Networking_Public_Data/rfc/rfc2698.txt (Two Rate Token Bucket)
+
+================================================================================
+END OF SPECIFICATION MAP
+================================================================================

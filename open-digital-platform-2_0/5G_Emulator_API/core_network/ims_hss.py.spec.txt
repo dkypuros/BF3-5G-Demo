@@ -1,0 +1,336 @@
+================================================================================
+                    SPECIFICATION MAP: ims_hss.py
+           IMS Home Subscriber Server - Spec Reference Bridge
+================================================================================
+
+Source File: 5G_Emulator_API/core_network/ims_hss.py
+Generated:   2026-01-10
+Lines:       889
+Purpose:     Map each code section to governing 3GPP specifications
+Based On:    Kamailio CDP, Open5GS HSS
+
+================================================================================
+PRIMARY GOVERNING SPECIFICATIONS
+================================================================================
+
+3GPP TS 29.228 - Cx and Dx Interfaces Based on Diameter
+  Location: 90_Work-Telco/3GPP/Rel-19/29_series/29228-j10.docx
+  Scope: Interface between I-CSCF/S-CSCF and HSS
+  Key Sections:
+    - Section 6: Procedures
+    - Section 6.1: User-Authorization (UAR/UAA)
+    - Section 6.2: Location-Info (LIR/LIA)
+    - Section 6.3: Multimedia-Auth (MAR/MAA)
+    - Section 6.4: Server-Assignment (SAR/SAA)
+    - Section 6.5: Registration-Termination (RTR/RTA)
+    - Section 6.6: Push-Profile (PPR/PPA)
+
+3GPP TS 29.229 - Cx and Dx Interfaces: Signalling Flows
+  Location: 90_Work-Telco/3GPP/Rel-19/29_series/29229-j00.docx
+  Scope: Diameter AVPs and data types
+  Key Sections:
+    - Section 6: Diameter AVPs
+    - Section 7: Result codes
+
+3GPP TS 33.203 - Access Security for IP-based Services
+  Location: 90_Work-Telco/3GPP/Rel-19/33_series/ (if available)
+  Scope: IMS AKA authentication, Milenage algorithm
+
+3GPP TS 35.206 - Milenage Algorithm Specification
+  Location: 90_Work-Telco/3GPP/Rel-19/35_series/ (if available)
+  Scope: f1-f5 algorithm implementation
+
+
+================================================================================
+LINE-BY-LINE SPECIFICATION MAPPING
+================================================================================
+
+
+LINES 1-26: MODULE HEADER AND FASTAPI SETUP
+--------------------------------------------------------------------------------
+
+Lines 1-4: Module Documentation
+  Reference: Kamailio CDP (Cx Diameter Protocol)
+  3GPP Specs: TS 29.228, TS 29.229
+
+Lines 6-16: Imports
+  - secrets: Cryptographic random for RAND generation
+  - struct: Binary packing for Milenage
+
+
+LINES 28-152: DATA MODELS
+--------------------------------------------------------------------------------
+
+Lines 32-48: class DiameterResultCode(Enum)
+  Spec: TS 29.229 Section 7 - Experimental-Result-Code AVP
+
+  Success codes:
+    - 2001: DIAMETER_FIRST_REGISTRATION
+    - 2002: DIAMETER_SUBSEQUENT_REGISTRATION
+    - 2003: DIAMETER_UNREGISTERED_SERVICE
+    - 2004: DIAMETER_SUCCESS_SERVER_NAME_NOT_STORED
+
+  Error codes (TS 29.229 Section 7.2):
+    - 5001: DIAMETER_ERROR_USER_UNKNOWN
+    - 5002: DIAMETER_ERROR_IDENTITIES_DONT_MATCH
+    - 5003: DIAMETER_ERROR_IDENTITY_NOT_REGISTERED
+    - 5004: DIAMETER_ERROR_ROAMING_NOT_ALLOWED
+    - 5005: DIAMETER_ERROR_IDENTITY_ALREADY_REGISTERED
+    - 5006: DIAMETER_ERROR_AUTH_SCHEME_NOT_SUPPORTED
+    - 5007: DIAMETER_ERROR_IN_ASSIGNMENT_TYPE
+
+Lines 49-71: class UserAuthorizationType, ServerAssignmentType(Enum)
+  Spec: TS 29.229 Section 6.3.24 (UAT), Section 6.3.15 (SAT)
+
+Lines 73-80: class AuthScheme(Enum)
+  Spec: TS 29.229 Section 6.3.20 - SIP-Authentication-Scheme AVP
+
+  Schemes defined:
+    - Digest-AKAv1-MD5: 3GPP IMS AKA (mandatory)
+    - Digest-AKAv2-MD5: Enhanced AKA
+    - Early-IMS-Security: Pre-standard
+    - NASS-Bundled: Fixed access bundled auth
+
+Lines 89-107: class ServiceProfileData, PublicIdentity
+  Spec: TS 29.228 Section 6.5.1 - User-Data AVP structure
+
+  Service Profile per TS 29.228:
+    - Initial Filter Criteria
+    - Subscribed Media Profile ID
+    - Shared iFC Set IDs
+
+Lines 109-114: class ImplicitRegistrationSet
+  Spec: TS 29.228 Section 6.5.2 - Implicit Registration Set
+
+  All IMPUs in IRS are registered/deregistered together
+
+Lines 122-152: class ImsSubscription
+  Spec: TS 29.228 Section 6.5 - User Profile
+
+  Core subscriber data:
+    - impi: Private Identity
+    - k, op, opc: Authentication keys (TS 33.203)
+    - amf, sqn: AKA parameters
+    - public_identities: IMPUs
+    - service_profiles: iFCs
+    - scscf_name: Assigned S-CSCF
+
+
+LINES 154-239: CX INTERFACE REQUEST/RESPONSE MODELS
+--------------------------------------------------------------------------------
+
+Lines 158-172: UAR/UAA Models
+  Spec: TS 29.228 Section 6.1
+
+  UAR AVPs:
+    - Public-Identity (Grouped)
+    - Visited-Network-Identifier
+    - User-Authorization-Type
+
+Lines 174-187: LIR/LIA Models
+  Spec: TS 29.228 Section 6.2
+
+  LIA specific:
+    - LIA-Flags (TS 29.229 Section 6.3.49)
+    - Wildcarded-Public-Identity
+
+Lines 189-218: MAR/MAA, SAR/SAA Models
+  Spec: TS 29.228 Sections 6.3, 6.4
+
+Lines 220-239: RTR/RTA, PPR/PPA Models
+  Spec: TS 29.228 Sections 6.5, 6.6
+
+
+LINES 241-342: MILENAGE ALGORITHM
+--------------------------------------------------------------------------------
+
+Lines 245-255: xor_bytes(), aes_encrypt()
+  Spec: TS 35.206 - Milenage building blocks
+  Note: Uses simplified simulation (MD5), production would use AES-128
+
+Lines 256-271: milenage_f1()
+  Spec: TS 35.206 Section 4.1 - f1 and f1* functions
+  Purpose: Network authentication (MAC-A/MAC-S)
+
+  f1 computation:
+    1. Compute OPc = AES(K, OP)
+    2. TEMP = AES(K, RAND XOR OPc)
+    3. IN1 = SQN || AMF || SQN || AMF
+    4. OUT1 = AES(K, rotate(TEMP XOR OPc XOR IN1, r1) XOR c1) XOR OPc
+    5. MAC-A = OUT1[0..63]
+
+Lines 273-308: milenage_f2345()
+  Spec: TS 35.206 Section 4.1 - f2, f3, f4, f5 functions
+
+  Outputs:
+    - f2: RES (response for authentication)
+    - f3: CK (cipher key)
+    - f4: IK (integrity key)
+    - f5: AK (anonymity key for SQN concealment)
+
+Lines 310-342: generate_auth_vector()
+  Spec: TS 29.229 Section 6.3.5 - SIP-Auth-Data-Item AVP
+  Spec: TS 33.203 - AKA authentication vector
+
+  Vector structure:
+    - RAND: Random challenge (128 bits)
+    - AUTN: SQN^AK || AMF || MAC-A
+    - XRES: Expected response
+    - CK: Cipher key
+    - IK: Integrity key
+
+
+LINES 344-473: HSS DATABASE
+--------------------------------------------------------------------------------
+
+Lines 348-470: class HssDatabase
+  Purpose: In-memory subscriber database
+
+  Tables:
+    - subscriptions: IMPI -> ImsSubscription
+    - impu_to_impi: IMPU -> IMPI mapping
+
+Lines 356-428: _init_test_subscribers()
+  Purpose: Initialize test users for development
+
+  Test users with:
+    - Unique K and OP values
+    - SIP URI and TEL URI
+    - Default service profile with sample iFC
+
+
+LINES 475-745: CX INTERFACE HANDLERS
+--------------------------------------------------------------------------------
+
+Lines 479-538: user_authorization_request() - UAR/UAA
+  Spec: TS 29.228 Section 6.1.1 - Procedures at HSS
+
+  Procedure per TS 29.228:
+    1. Verify Public-Identity exists
+    2. Verify Private-Identity matches
+    3. Check roaming authorization (Visited-Network-Identifier)
+    4. If already registered: Return SUBSEQUENT_REGISTRATION + Server-Name
+    5. If new: Return FIRST_REGISTRATION + Server-Capabilities
+
+Lines 540-568: location_info_request() - LIR/LIA
+  Spec: TS 29.228 Section 6.2.1 - Procedures at HSS
+
+  Used for:
+    - Finding S-CSCF for terminating calls
+    - Topology Hiding (THIG) queries
+
+Lines 570-619: multimedia_auth_request() - MAR/MAA
+  Spec: TS 29.228 Section 6.3.1 - Procedures at HSS
+
+  Procedure:
+    1. Validate user identity
+    2. Check authentication scheme support
+    3. Generate N authentication vectors using Milenage
+    4. Update SQN
+    5. Return SIP-Auth-Data-Items
+
+Lines 621-699: server_assignment_request() - SAR/SAA
+  Spec: TS 29.228 Section 6.4.1 - Procedures at HSS
+
+  Assignment types handled:
+    - REGISTRATION/RE_REGISTRATION: Store S-CSCF assignment
+    - USER_DEREGISTRATION: Clear S-CSCF, set NOT_REGISTERED
+    - TIMEOUT_DEREGISTRATION: Same as user dereg
+    - UNREGISTERED_USER: Store S-CSCF for terminating service
+
+  Returns:
+    - User-Profile (TS 29.228 Section 6.5)
+    - Associated-Identities (implicit registration set)
+    - Charging-Information
+
+Lines 701-722: registration_termination_request() - RTR/RTA
+  Spec: TS 29.228 Section 6.5 - HSS initiated de-registration
+
+  Used for:
+    - Administrative de-registration
+    - Subscription termination
+    - Fraud detection
+
+Lines 724-745: push_profile_request() - PPR/PPA
+  Spec: TS 29.228 Section 6.6 - Profile update
+
+  Used when:
+    - Service profile changes
+    - Charging information updates
+    - iFC modifications
+
+
+LINES 747-849: SUBSCRIPTION MANAGEMENT APIS
+--------------------------------------------------------------------------------
+
+Lines 751-786: Subscription query endpoints
+  Purpose: Administrative access to subscriber data
+
+Lines 788-827: Subscription CRUD operations
+  Purpose: Provisioning interface
+
+Lines 836-849: iFC management
+  Purpose: Update Initial Filter Criteria
+
+
+LINES 851-889: HEALTH AND STARTUP
+--------------------------------------------------------------------------------
+
+Lines 855-871: root endpoint (/)
+  Returns HSS status with:
+    - Total subscriptions
+    - Registered users
+    - Interface list (Cx, Dx)
+
+Lines 873-876: health endpoint (/health)
+  Standard health check
+
+Lines 882-888: Main entry point
+  Starts on port 9040
+
+
+================================================================================
+SPECIFICATION CROSS-REFERENCE TABLE
+================================================================================
+
+| Code Section              | Primary Spec      | Section        |
+|---------------------------|-------------------|----------------|
+| DiameterResultCode        | TS 29.229         | 7              |
+| UserAuthorizationType     | TS 29.229         | 6.3.24         |
+| ServerAssignmentType      | TS 29.229         | 6.3.15         |
+| AuthScheme                | TS 29.229         | 6.3.20         |
+| ImsSubscription           | TS 29.228         | 6.5            |
+| ServiceProfileData        | TS 29.228         | 6.5.1          |
+| ImplicitRegistrationSet   | TS 29.228         | 6.5.2          |
+| milenage_f1               | TS 35.206         | 4.1            |
+| milenage_f2345            | TS 35.206         | 4.1            |
+| generate_auth_vector      | TS 29.229         | 6.3.5          |
+| user_authorization_request| TS 29.228         | 6.1            |
+| location_info_request     | TS 29.228         | 6.2            |
+| multimedia_auth_request   | TS 29.228         | 6.3            |
+| server_assignment_request | TS 29.228         | 6.4            |
+| registration_termination  | TS 29.228         | 6.5            |
+| push_profile_request      | TS 29.228         | 6.6            |
+
+
+================================================================================
+DIAMETER AVP REFERENCE (TS 29.229 Section 6)
+================================================================================
+
+| AVP Name                  | AVP Code | Data Type    | Used In      |
+|---------------------------|----------|--------------|--------------|
+| Public-Identity           | 601      | UTF8String   | UAR,LIR,SAR  |
+| Private-Identity          | 603      | UTF8String   | UAR,MAR,SAR  |
+| Server-Name               | 602      | UTF8String   | UAA,LIA,SAA  |
+| Server-Capabilities       | 603      | Grouped      | UAA,LIA      |
+| User-Authorization-Type   | 623      | Enumerated   | UAR          |
+| Server-Assignment-Type    | 614      | Enumerated   | SAR          |
+| SIP-Auth-Data-Item        | 612      | Grouped      | MAA          |
+| SIP-Authentication-Scheme | 608      | UTF8String   | MAR,MAA      |
+| User-Data                 | 606      | OctetString  | SAA,PPR      |
+| Charging-Information      | 618      | Grouped      | SAA          |
+
+
+================================================================================
+                              END OF DOCUMENT
+================================================================================

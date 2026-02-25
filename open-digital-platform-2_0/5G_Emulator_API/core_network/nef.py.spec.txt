@@ -1,0 +1,351 @@
+================================================================================
+                    SPECIFICATION MAP: nef.py
+           Network Exposure Function - Spec Reference Bridge
+================================================================================
+
+Source File: 5G_Emulator_API/core_network/nef.py
+Generated:   2026-01-10
+Lines:       689
+Purpose:     Map each code section to governing 3GPP specifications
+Based On:    Free5GC NEF implementation
+
+================================================================================
+PRIMARY GOVERNING SPECIFICATIONS
+================================================================================
+
+3GPP TS 29.522 - Network Exposure Function Northbound APIs
+  Location: 90_Work-Telco/3GPP/Rel-19/29_series/
+  Scope: NEF APIs for external Application Functions
+  Key Sections:
+    - Section 4.4: Monitoring Event API
+    - Section 4.5: Traffic Influence API
+    - Section 4.6: PFD Management API
+    - Section 4.7: AS Session with QoS API
+    - Section 4.8: Chargeable Party API
+
+3GPP TS 29.551 - NEF AF Services
+  Location: 90_Work-Telco/3GPP/Rel-19/29_series/
+  Scope: Nnef services
+
+3GPP TS 23.502 - Procedures for 5G System
+  Location: 90_Work-Telco/3GPP/Rel-19/23_series/
+  Scope: NEF procedures
+  Key Sections:
+    - Section 4.15: Network Exposure services
+
+
+================================================================================
+LINE-BY-LINE SPECIFICATION MAPPING
+================================================================================
+
+
+LINES 1-28: MODULE HEADER AND IMPORTS
+--------------------------------------------------------------------------------
+
+Lines 1-4: Module Documentation
+  Reference: Free5GC NEF
+  3GPP Specs: TS 29.522
+
+Lines 6-19: Imports
+  - FastAPI: HTTP API framework
+  - httpx: Async HTTP client for notifications
+  - OpenTelemetry: Distributed tracing
+
+
+LINES 30-176: DATA MODELS
+--------------------------------------------------------------------------------
+
+Lines 32-45: class MonitoringType(Enum)
+  Spec: TS 29.522 Section 4.4.3 - MonitoringType
+
+  Monitoring event types:
+    - LOCATION_REPORTING: UE location
+    - ROAMING_STATUS: Roaming changes
+    - COMMUNICATION_FAILURE: Connection failures
+    - UE_REACHABILITY: Reachability status
+    - LOSS_OF_CONNECTIVITY: Connectivity loss
+    - And more...
+
+Lines 46-54: class EventType(Enum)
+  Spec: TS 29.522 - Event notifications
+
+  Event types:
+    - SESSION_TERMINATION: Session ended
+    - USAGE_REPORT: Usage metrics
+    - FAILED_RESOURCES_ALLOCATION: QoS failure
+
+Lines 55-59: class TrafficInfluenceType(Enum)
+  Spec: TS 29.522 Section 4.5.3 - Traffic steering types
+
+  Types:
+    - BREAKOUT: Local breakout
+    - STEERING: Traffic steering
+    - OFFLOAD: Traffic offload
+
+Lines 60-74: class PlmnId, Snssai, LocationArea
+  Spec: TS 29.571 - Common Data Types
+
+  LocationArea contains:
+    - Cell IDs, eNodeB IDs
+    - TAI list
+    - Geographical area
+    - Civic address
+
+Lines 75-92: class AfSubscription
+  Spec: TS 29.522 Section 4.4.6.2 - AfEventSubscription
+
+  AF subscription parameters:
+    - afId: Application Function identifier
+    - appId: Application identifier
+    - dnn/snssai: Network context
+    - Target UE (gpsi, IP, MAC)
+    - notificationDestination: Callback URL
+    - events: Subscribed events
+
+Lines 93-108: class MonitoringEventSubscription
+  Spec: TS 29.522 Section 4.4.6.3 - MonitoringEventSubscription
+
+  Parameters:
+    - External/internal ID of target UE
+    - Monitoring type
+    - Maximum reports
+    - Expiry time
+    - Location area filter
+
+Lines 109-118: class MonitoringEventReport
+  Spec: TS 29.522 Section 4.4.6.4 - MonitoringEventReport
+
+  Report contains:
+    - Event time
+    - Location info
+    - Connectivity status
+
+Lines 119-137: class TrafficInfluenceSubscription
+  Spec: TS 29.522 Section 4.5.6.2 - TrafficInfluSub
+
+  Parameters:
+    - trafficFilters: Flow description
+    - trafficRoutes: Routing rules
+    - dnaiChgType: Steering type
+
+Lines 138-153: class AsSessionWithQoS
+  Spec: TS 29.522 Section 4.7.6.2 - AsSessionWithQoSSubscription
+
+  QoS parameters:
+    - qosReference: QoS profile reference
+    - medComponents: Media components
+
+Lines 154-158: class PfdManagement
+  Spec: TS 29.522 Section 4.6.6.2 - PfdManagement
+
+  PFD data for DPI
+
+Lines 159-168: class ChargeableParty
+  Spec: TS 29.522 Section 4.8.6.2 - ChargeableParty
+
+  Sponsored connectivity
+
+
+LINES 169-176: NEF STORAGE
+--------------------------------------------------------------------------------
+
+Lines 170-177: Storage structures
+
+  - af_subscriptions: AF event subscriptions
+  - monitoring_subscriptions: Monitoring events
+  - traffic_influence_subscriptions: Traffic steering
+  - qos_subscriptions: QoS sessions
+  - pfd_data: Packet Flow Descriptions
+  - notification_history: Notification log
+
+
+LINES 179-315: NEF CLASS
+--------------------------------------------------------------------------------
+
+Lines 179-195: class NEF.__init__ and HTTP client
+  Initializes NEF with async HTTP client
+
+Lines 196-228: send_notification()
+  Sends notification to AF callback URL
+
+  Logs notification history:
+    - Destination
+    - Notification content
+    - Status (SUCCESS/FAILED/ERROR)
+
+Lines 229-243: create_monitoring_subscription()
+  Spec: TS 29.522 Section 4.4.4 - Subscribe
+
+  Creates monitoring event subscription
+  Sets default expiry if not specified
+
+Lines 244-263: create_traffic_influence_subscription() / create_qos_subscription()
+  Spec: TS 29.522 Sections 4.5.4, 4.7.4
+
+Lines 264-280: store_pfd_data()
+  Spec: TS 29.522 Section 4.6.4 - PFD transaction
+
+  Stores PFD data for application
+
+Lines 281-315: trigger_monitoring_event()
+  Triggers monitoring event and sends notification to AF
+
+  Handles:
+    - Building MonitoringEventReport
+    - Sending notification
+    - Decrementing report count
+    - Auto-deleting subscription at max reports
+
+
+LINES 320-379: NRF REGISTRATION
+--------------------------------------------------------------------------------
+
+Lines 320-379: lifespan() - Startup/Shutdown
+  Spec: TS 29.510 - Nnrf_NFManagement service
+
+  NF Profile per TS 29.510:
+    - nfServices: nnef-pfdmanagement, nnef-eventexposure, nnef-traffinfluence
+    - nefInfo: NEF ID
+
+
+LINES 398-459: MONITORING EVENT API
+--------------------------------------------------------------------------------
+
+Lines 400-425: create_monitoring_subscription()
+  Spec: TS 29.522 Section 4.4.4.2.1 - Create Subscription
+  Service: MonitoringEvent API
+
+  API: POST /3gpp-monitoring-event/v1/subscriptions
+
+Lines 427-441: list_monitoring_subscriptions()
+  API: GET /3gpp-monitoring-event/v1/subscriptions
+
+Lines 443-449: get_monitoring_subscription()
+  API: GET /3gpp-monitoring-event/v1/subscriptions/{id}
+
+Lines 451-459: delete_monitoring_subscription()
+  Spec: TS 29.522 Section 4.4.4.3.1 - Delete Subscription
+  API: DELETE /3gpp-monitoring-event/v1/subscriptions/{id}
+
+
+LINES 461-511: TRAFFIC INFLUENCE API
+--------------------------------------------------------------------------------
+
+Lines 463-487: create_traffic_influence_subscription()
+  Spec: TS 29.522 Section 4.5.4.2.1 - Create Subscription
+  Service: TrafficInfluence API
+
+  API: POST /3gpp-traffic-influence/v1/subscriptions
+
+Lines 489-511: List and delete traffic influence subscriptions
+  API: GET/DELETE /3gpp-traffic-influence/v1/subscriptions
+
+
+LINES 513-552: PFD MANAGEMENT API
+--------------------------------------------------------------------------------
+
+Lines 515-546: create_pfd_transaction()
+  Spec: TS 29.522 Section 4.6.4.2.1 - Create PFD Transaction
+  Service: PfdManagement API
+
+  API: POST /3gpp-pfd-management/v1/transactions
+
+  Stores PFD (Packet Flow Description) data:
+    - Application identification
+    - Flow descriptions for DPI
+
+Lines 548-552: list_pfd_transactions()
+  API: GET /3gpp-pfd-management/v1/transactions
+
+
+LINES 554-604: AS SESSION WITH QOS API
+--------------------------------------------------------------------------------
+
+Lines 556-580: create_qos_subscription()
+  Spec: TS 29.522 Section 4.7.4.2.1 - Create QoS Subscription
+  Service: AsSessionWithQoS API
+
+  API: POST /3gpp-as-session-with-qos/v1/subscriptions
+
+Lines 582-604: List and delete QoS subscriptions
+
+
+LINES 606-654: CHARGEABLE PARTY AND NOTIFICATION APIs
+--------------------------------------------------------------------------------
+
+Lines 608-633: Chargeable Party API
+  Spec: TS 29.522 Section 4.8 - Chargeable Party
+
+  API: POST/GET /3gpp-chargeable-party/v1/transactions
+
+  For sponsored connectivity
+
+Lines 637-654: Notification testing
+  - POST /nef/test-notification: Trigger test event
+  - GET /nef/notification-history: View sent notifications
+
+
+LINES 656-689: HEALTH AND METRICS
+--------------------------------------------------------------------------------
+
+Lines 658-684: Health and metrics
+  Returns:
+    - Active subscriptions by type
+    - PFD entries
+    - Chargeable parties
+    - Notifications sent
+
+
+================================================================================
+SPECIFICATION CROSS-REFERENCE TABLE
+================================================================================
+
+| Code Section                     | Primary Spec | Section        |
+|----------------------------------|--------------|----------------|
+| MonitoringType                   | TS 29.522    | 4.4.3          |
+| TrafficInfluenceType             | TS 29.522    | 4.5.3          |
+| AfSubscription                   | TS 29.522    | 4.4.6.2        |
+| MonitoringEventSubscription      | TS 29.522    | 4.4.6.3        |
+| MonitoringEventReport            | TS 29.522    | 4.4.6.4        |
+| TrafficInfluenceSubscription     | TS 29.522    | 4.5.6.2        |
+| AsSessionWithQoS                 | TS 29.522    | 4.7.6.2        |
+| PfdManagement                    | TS 29.522    | 4.6.6.2        |
+| ChargeableParty                  | TS 29.522    | 4.8.6.2        |
+| create_monitoring_subscription   | TS 29.522    | 4.4.4.2.1      |
+| create_traffic_influence_sub     | TS 29.522    | 4.5.4.2.1      |
+| create_pfd_transaction           | TS 29.522    | 4.6.4.2.1      |
+| create_qos_subscription          | TS 29.522    | 4.7.4.2.1      |
+
+
+================================================================================
+NEF EXPOSURE SERVICES (TS 29.522)
+================================================================================
+
+| API                    | Purpose                              |
+|------------------------|--------------------------------------|
+| Monitoring Event       | Subscribe to UE events (location,    |
+|                        | reachability, connectivity)          |
+| Traffic Influence      | Steer traffic, local breakout        |
+| PFD Management         | Define application traffic patterns  |
+| AS Session with QoS    | Request QoS for application flows    |
+| Chargeable Party       | Sponsored data connectivity          |
+| Device Triggering      | Trigger IoT devices                  |
+| NIDD                   | Non-IP Data Delivery                 |
+
+
+================================================================================
+NEF INTERFACE MAPPING
+================================================================================
+
+| Interface | Connected NF | Service              | Purpose                |
+|-----------|--------------|----------------------|------------------------|
+| N33       | AF           | NEF Northbound APIs  | External exposure      |
+| N29       | SMF          | Nsmf_EventExposure   | Event subscription     |
+| N30       | PCF          | Npcf_PolicyAuth      | Policy authorization   |
+| N37       | UDR          | Nudr_DataRepository  | Data storage           |
+| Nnrf      | NRF          | Nnrf_NFManagement    | NF registration        |
+
+
+================================================================================
+                              END OF DOCUMENT
+================================================================================

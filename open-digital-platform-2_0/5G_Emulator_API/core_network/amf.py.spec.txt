@@ -1,0 +1,426 @@
+================================================================================
+                    SPECIFICATION MAP: amf.py
+         Access and Mobility Management Function - Spec Reference Bridge
+================================================================================
+
+Source File: 5G_Emulator_API/core_network/amf.py
+Generated:   2026-01-06
+Lines:       353
+Purpose:     Map each code section to governing 3GPP and IETF specifications
+
+
+================================================================================
+PRIMARY GOVERNING SPECIFICATIONS
+================================================================================
+
+3GPP TS 29.518 - AMF Services (Namf)
+  Location: 90_Work-Telco/3GPP/Rel-19/29_series/29518-j40.docx
+  YAML APIs:
+    - TS29518_Namf_Communication.yaml (N1/N2 message handling)
+    - TS29518_Namf_EventExposure.yaml (Event subscription)
+    - TS29518_Namf_Location.yaml (Location services)
+    - TS29518_Namf_MT.yaml (Mobile Terminating)
+  Scope: Defines AMF SBI services
+
+3GPP TS 38.413 - NGAP Protocol (N2 Interface)
+  Location: 90_Work-Telco/3GPP/Rel-19/38_series/38413-j10.docx
+  Scope: NG Application Protocol between gNB and AMF
+
+3GPP TS 23.502 - 5G System Procedures
+  Location: 90_Work-Telco/3GPP/Rel-19/23_series/23502-j40.docx
+  Scope: Registration, PDU Session, Handover procedures
+
+3GPP TS 24.501 - NAS Protocol for 5G
+  Location: 90_Work-Telco/3GPP/Rel-19/24_series/24501-j40.docx
+  Scope: Non-Access Stratum messages (Registration, Auth, etc.)
+
+
+================================================================================
+LINE-BY-LINE SPECIFICATION MAPPING
+================================================================================
+
+
+LINES 1-21: IMPORTS AND OBSERVABILITY SETUP
+--------------------------------------------------------------------------------
+
+Lines 12-21: OpenTelemetry and Prometheus Imports
+  Spec: OpenTelemetry Specification (CNCF)
+        Prometheus Exposition Format
+        W3C Trace Context
+
+  Key Imports:
+    - trace, metrics: OpenTelemetry core APIs
+    - PrometheusMetricReader: Exposes metrics in Prometheus format
+    - FastAPIInstrumentor: Auto-instruments HTTP endpoints
+
+  Relevance: 3GPP TS 32.422 defines trace management concepts
+             Your observability extends beyond 3GPP into cloud-native standards
+
+
+LINES 40-77: CUSTOM JSON TRACE EXPORTER
+--------------------------------------------------------------------------------
+
+Lines 41-77: class JsonFileExporter(SpanExporter)
+  Spec: OpenTelemetry Exporter Interface
+
+  Span Structure (lines 56-77):
+    - name: Operation name (e.g., "ngap_handover_request")
+    - context.trace_id: W3C Trace Context - 128-bit trace identifier
+    - context.span_id: W3C Trace Context - 64-bit span identifier
+    - kind: CLIENT, SERVER, PRODUCER, CONSUMER, INTERNAL
+    - start_time, end_time: Nanosecond timestamps
+    - attributes: Key-value pairs (your 3GPP custom attributes)
+    - events: Timestamped annotations within span
+
+  3GPP Mapping: Each span represents a 3GPP procedure step
+                Attributes encode 3GPP-specific context
+
+
+LINES 79-99: TRACING AND METRICS INITIALIZATION
+--------------------------------------------------------------------------------
+
+Line 80: resource = Resource.create({"service.name": "amf-service"})
+  Spec: OpenTelemetry Resource Semantic Conventions
+        service.name identifies AMF in distributed traces
+
+Lines 90-95: Prometheus Metrics Setup
+  Spec: Prometheus Data Model
+        OpenMetrics Specification
+
+Lines 98-99: Custom AMF Metrics
+  handover_request_counter = meter.create_counter("ngap_handover_requests_total")
+  handover_duration_histogram = meter.create_histogram("ngap_handover_duration_seconds")
+
+  Prometheus Naming: {namespace}_{name}_{unit}_{type}
+  3GPP Context: NGAP handover is defined in TS 38.413
+
+
+LINES 101-129: NF LIFECYCLE (REGISTRATION/DISCOVERY)
+--------------------------------------------------------------------------------
+
+Lines 107-111: nf_registration payload
+  Spec: 3GPP TS 29.510 - Section 6.1.6.2.2 NFProfile
+  Fields: nf_type="AMF", ip, port
+  Full: Production would include amfInfo, guamiList, taiList
+
+Line 113: requests.post(f"{nrf_url}/register", ...)
+  Spec: 3GPP TS 29.510 - Section 5.2.2.2 NFRegister
+
+Lines 116-121: SMF Discovery
+  Spec: 3GPP TS 29.510 - Section 5.2.3.2 NFDiscover
+        AMF discovers SMF for N11 interface
+  Use: Route PDU Session requests to appropriate SMF
+
+Line 125: start_http_server(9100)
+  Spec: Prometheus HTTP API for metrics scraping
+
+Line 129: FastAPIInstrumentor.instrument_app(app)
+  Spec: OpenTelemetry FastAPI Instrumentation
+        Auto-creates spans for all HTTP requests
+
+
+LINES 131-136: SIMULATED NETWORK DATA
+--------------------------------------------------------------------------------
+
+Line 132: ue_contexts: Dict[str, Dict] = {}
+  Spec: 3GPP TS 23.502 - Section 4.2.2.2.3 UE Context
+        AMF maintains context per registered UE
+  Contents: Registration state, security context, PDU sessions
+
+Lines 133-136: gnb_data
+  Spec: 3GPP TS 38.413 - Section 9.2.6.1 Global RAN Node ID
+        AMF tracks connected gNBs for N2 interface
+
+
+LINES 138-202: NGAP HANDOVER PROCEDURES (N2 INTERFACE)
+================================================================================
+
+This section implements NGAP handover messaging per TS 38.413.
+
+Lines 138-161: handle_ngap_handover_request()
+  Spec: 3GPP TS 38.413 - Section 8.4.1 Handover Preparation
+        Message: HANDOVER REQUIRED (gNB -> AMF)
+  YAML: Not available (NGAP is ASN.1, not OpenAPI)
+
+  Line 140: span.set_attribute("ngap.message_type", "NGAP_HANDOVER_REQUEST")
+    Spec: TS 38.413 - Section 9.2.1.1 Message Type
+          HANDOVER REQUIRED = procedure code 0
+
+  Line 141: span.set_attribute("ngap.source_gnb_id", ...)
+    Spec: TS 38.413 - Section 9.3.1.8 Global gNB ID
+          Identifies source gNB in handover
+
+  Lines 146-149: UE Context Lookup
+    Spec: TS 23.502 - Section 4.9.1.2 Handover Preparation
+          AMF verifies UE is registered and has active context
+
+  Lines 151-153: Target gNB Selection
+    Spec: TS 23.502 - Section 4.9.1.2 Step 2
+          AMF selects target cell/gNB based on measurements
+    Note: Simplified; real selection considers load, capability
+
+  Line 159: send_ngap_handover_request_ack()
+    Spec: TS 38.413 - Section 8.4.1.2 Handover Request Acknowledge
+          AMF -> Target gNB: Prepare resources
+
+
+Lines 163-169: send_ngap_handover_request_ack()
+  Spec: 3GPP TS 38.413 - Section 8.4.1.2
+        Message: HANDOVER REQUEST ACKNOWLEDGE (Target gNB -> AMF)
+
+  Line 165: "NGAP_HANDOVER_REQUEST_ACK"
+    Spec: TS 38.413 - Successful Outcome of Handover Request
+
+
+Lines 171-186: initiate_ngap_resource_setup()
+  Spec: 3GPP TS 38.413 - Section 8.2 PDU Session Resource Management
+        Message: PDU SESSION RESOURCE SETUP REQUEST
+
+  Line 173: "NGAP_RESOURCE_SETUP_REQUEST"
+    Spec: TS 38.413 - Section 9.2.1.1, Procedure Code = 29
+
+  Lines 178-184: Resource Setup Flow
+    Spec: TS 38.413 - Section 8.2.1
+          1. AMF sends PDU Session Resource Setup Request
+          2. Target gNB allocates resources
+          3. Target gNB sends Setup Response
+
+
+Lines 188-202: send_ngap_handover_command()
+  Spec: 3GPP TS 38.413 - Section 8.4.2 Handover Resource Allocation
+        Message: HANDOVER COMMAND (AMF -> Source gNB)
+
+  Line 190: "NGAP_HANDOVER_COMMAND"
+    Spec: TS 38.413 - Section 9.2.1.1
+          Procedure Code for Handover = 0 (Successful Outcome)
+
+  Lines 199-201: Handover Execution
+    Spec: TS 38.413 - Section 8.4.3 Handover Notification
+          1. Source gNB commands UE to handover
+          2. UE detaches from source, attaches to target
+          3. Target gNB sends HANDOVER NOTIFY
+
+
+LINES 204-227: HANDOVER API ENDPOINT
+--------------------------------------------------------------------------------
+
+Line 204: @app.post("/amf/handover")
+  Spec: NOT in 3GPP SBI - internal/debug endpoint
+        Real handover triggered by NGAP from gNB
+  Alt: TS 29.518 Namf_Communication for SBI-based triggers
+
+  Full Handover Procedure (TS 23.502 Section 4.9.1):
+    Step 1: Measurement Report (UE -> gNB)
+    Step 2: Handover Required (Source gNB -> AMF) [line 211]
+    Step 3: Handover Request (AMF -> Target gNB)
+    Step 4: Handover Request Ack (Target gNB -> AMF)
+    Step 5: Handover Command (AMF -> Source gNB) [line 217]
+    Step 6: Handover (UE moves to target)
+    Step 7: Handover Complete (Target gNB -> AMF)
+
+Lines 206-207: Metrics Recording
+  Spec: Prometheus Counter and Histogram
+        handover_request_counter increments per handover
+        handover_duration_histogram records latency
+
+
+LINES 229-239: UE CONTEXT MANAGEMENT
+--------------------------------------------------------------------------------
+
+Lines 229-233: @app.get("/amf/ue/{ue_id}")
+  Spec: Partial alignment with TS 29.518 Namf_Communication
+        Section 5.2.2.2.8 - UEContextTransfer
+  Note: Real spec uses POST with complex transfer data
+
+Lines 235-239: @app.post("/amf/ue/{ue_id}")
+  Spec: UE context creation during registration
+        TS 23.502 - Section 4.2.2.2.2 Registration Procedure
+        TS 24.501 - NAS Registration messages
+
+
+LINES 241-309: PDU SESSION ESTABLISHMENT (N11 INTERFACE)
+================================================================================
+
+This section implements AMF's role in PDU Session Establishment.
+
+Lines 241-309: trigger_pdu_session_creation()
+  Spec: 3GPP TS 23.502 - Section 4.3.2.2.1
+        "UE Requested PDU Session Establishment"
+
+  Line 254: sm_context_endpoint = f"{smf_url}/nsmf-pdusession/v1/sm-contexts"
+    Spec: TS 29.502 - Section 5.2.2.2.1 CreateSMContext
+          This is the N11 reference point (AMF -> SMF)
+    YAML: TS29502_Nsmf_PDUSession.yaml paths./sm-contexts.post
+
+  Lines 258-281: pdu_session_data (SmContextCreateData)
+    Spec: TS 29.502 - Section 6.1.6.2.2 SmContextCreateData
+
+    Line 259: "supi": ue_context.get("supi")
+      Spec: TS 23.003 - Subscription Permanent Identifier
+            Format: imsi-{mcc}{mnc}{msin}
+
+    Line 260: "pduSessionId": ue_context.get("pduSessionId")
+      Spec: TS 24.501 - Section 9.4, PDU Session ID (1-15)
+
+    Line 261: "dnn": "internet"
+      Spec: TS 23.501 - Section 5.6.1 Data Network Name
+            Identifies target data network (like APN in 4G)
+
+    Lines 262-265: "sNssai"
+      Spec: TS 23.501 - Section 5.15.2 S-NSSAI
+            sst=1: eMBB (Enhanced Mobile Broadband)
+            sd="010203": Slice Differentiator
+
+    Line 266: "gpsi"
+      Spec: TS 23.003 - Generic Public Subscription Identifier
+            Format: msisdn-{phone_number}
+
+    Line 267: "anType": "3GPP_ACCESS"
+      Spec: TS 29.571 - AccessType enum
+            3GPP_ACCESS = via RAN (gNB)
+            NON_3GPP_ACCESS = via N3IWF (WiFi, etc.)
+
+    Line 268: "ratType": "NR"
+      Spec: TS 29.571 - RatType enum
+            NR = 5G New Radio
+
+    Lines 269-280: "ueLocation"
+      Spec: TS 29.571 - Section 5.4.4.14 UserLocation
+
+      Lines 271-274: "tai" (Tracking Area Identity)
+        Spec: TS 23.003 - Section 19.4.2.3
+              plmnId + TAC identifies tracking area
+
+      Lines 275-278: "ncgi" (NR Cell Global Identity)
+        Spec: TS 23.003 - Section 19.6.4
+              plmnId + NR Cell ID identifies cell
+
+
+  Lines 286-303: OpenTelemetry Span for N11 Call
+    Span Attributes:
+      - "3gpp.procedure": "pdu_session_establishment"
+      - "3gpp.interface": "N11" (AMF-SMF)
+      - "3gpp.service": "Nsmf_PDUSession"
+
+    Line 293: requests.post(sm_context_endpoint, json=pdu_session_data)
+      Spec: TS 29.502 - HTTP POST to create SM Context
+      Wire: HTTP/1.1 (should be HTTP/2 per TS 29.500)
+
+
+LINES 311-345: PDU SESSION API ENDPOINT
+--------------------------------------------------------------------------------
+
+Line 311: @app.post("/amf/pdu-session/create")
+  Spec: NOT in 3GPP SBI - simplified trigger endpoint
+  Real: UE sends NAS PDU Session Est Request (TS 24.501)
+        AMF receives via NGAP Initial UE Message (TS 38.413)
+
+  Full PDU Session Flow (TS 23.502 Section 4.3.2.2.1):
+    Step 1: UE -> gNB: NAS PDU Session Establishment Request
+    Step 2: gNB -> AMF: NGAP Initial UE Message (uplink NAS)
+    Step 3: AMF -> SMF: Nsmf_PDUSession CreateSMContext [line 334]
+    Step 4: SMF -> UPF: PFCP Session Establishment
+    Step 5: SMF -> AMF: CreateSMContext Response with N2 SM Info
+    Step 6: AMF -> gNB: NGAP PDU Session Resource Setup Request
+    Step 7: gNB -> AMF: NGAP PDU Session Resource Setup Response
+    Step 8: AMF -> UE: NAS PDU Session Establishment Accept
+
+Lines 325-331: Generate Missing 3GPP Identifiers
+  Line 327: supi = f"imsi-00101{ue_id}"
+    Spec: TS 23.003 - SUPI format
+          "imsi-" prefix + MCC(3) + MNC(2-3) + MSIN
+
+  Line 329: pduSessionId = len(ue_contexts) + 1
+    Spec: TS 24.501 - PDU Session ID allocation (1-15 per UE)
+
+
+LINES 347-353: METRICS AND SERVER
+--------------------------------------------------------------------------------
+
+Line 347: @app.get("/metrics")
+  Spec: Prometheus HTTP API convention
+  Note: Actual metrics on port 9100 (line 125)
+
+Line 352: uvicorn.run(app, host="0.0.0.0", port=9000)
+  Spec: ASGI Specification
+  Port: 9000 is custom; no standard AMF port
+
+
+================================================================================
+NGAP MESSAGE TYPES REFERENCED (TS 38.413)
+================================================================================
+
+Your code models these NGAP messages:
+
+  Message Name                    Procedure Code    Direction
+  --------------------------------------------------------------------
+  HANDOVER REQUIRED               0 (init)          gNB -> AMF
+  HANDOVER REQUEST                0 (init)          AMF -> Target gNB
+  HANDOVER REQUEST ACKNOWLEDGE    0 (success)       Target gNB -> AMF
+  HANDOVER COMMAND                0 (success)       AMF -> Source gNB
+  PDU SESSION RESOURCE SETUP REQ  29 (init)         AMF -> gNB
+  PDU SESSION RESOURCE SETUP RSP  29 (success)      gNB -> AMF
+
+Full NGAP message list: TS 38.413 Section 9.2
+
+
+================================================================================
+OPENTELEMETRY SPAN HIERARCHY FOR HANDOVER
+================================================================================
+
+Your traces create this span hierarchy:
+
+  [amf_handover] ─────────────────────────────────────────── Total Duration
+    ├── [ngap_handover_request] ────────────────────────── Handle Request
+    │     └── Event: UE context lookup
+    ├── [ngap_handover_request_ack] ────────────────────── Send Ack
+    ├── [ngap_resource_setup] ──────────────────────────── Setup Resources
+    │     └── Event: "Resource setup completed"
+    └── [ngap_handover_command] ────────────────────────── Execute Handover
+          └── Event: "Handover completed"
+
+This maps to TS 23.502 Section 4.9.1.2 Handover Procedure steps.
+
+
+================================================================================
+GAPS VS FULL COMPLIANCE
+================================================================================
+
+Missing NGAP Features (TS 38.413):
+  - Path Switch Request (intra-AMF handover)
+  - Handover Cancel/Failure handling
+  - UE Context Release
+  - Paging
+
+Missing AMF Services (TS 29.518):
+  - Namf_Communication (N1N2MessageTransfer)
+  - Namf_EventExposure (subscription/notification)
+  - Namf_Location (positioning)
+
+Missing NAS Protocol (TS 24.501):
+  - Registration procedure
+  - Authentication
+  - Security Mode Command
+  - Service Request
+
+
+================================================================================
+SPECIFICATION FILE LOCATIONS
+================================================================================
+
+Primary Specs:
+  90_Work-Telco/3GPP/Rel-19/29_series/29518-j40.docx
+  90_Work-Telco/3GPP/Rel-19/29_series/TS29518_Namf_Communication.yaml
+  90_Work-Telco/3GPP/Rel-19/38_series/38413-j10.docx
+  90_Work-Telco/3GPP/Rel-19/23_series/23502-j40.docx
+  90_Work-Telco/3GPP/Rel-19/24_series/24501-j40.docx
+
+Related Networking Knowledge:
+  21_Networking_Public_Data/43_Telecom_5G_Interfaces/ (N1, N2, N11)
+  21_Networking_Public_Data/45_Telecom_5G_NFs/ (AMF role)
+  21_Networking_Public_Data/46_Telecom_Radio/ (gNB, handover)
+
+
+================================================================================
+                         END OF SPECIFICATION MAP
+================================================================================

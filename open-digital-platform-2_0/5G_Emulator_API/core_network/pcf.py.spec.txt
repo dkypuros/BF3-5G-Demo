@@ -1,0 +1,249 @@
+================================================================================
+                    SPECIFICATION MAP: pcf.py
+            Policy Control Function - Spec Reference Bridge
+================================================================================
+
+Source File: 5G_Emulator_API/core_network/pcf.py
+Generated:   2026-01-10
+Lines:       753
+Purpose:     Map each code section to governing 3GPP specifications
+Based On:    Open5GS, Free5GC PCF implementations
+
+================================================================================
+PRIMARY GOVERNING SPECIFICATIONS
+================================================================================
+
+3GPP TS 29.507 - Policy Control Function Services
+  Location: 90_Work-Telco/3GPP/Rel-19/29_series/
+  Scope: PCF service framework
+  Key Sections:
+    - Section 5: PCF service description
+
+3GPP TS 29.512 - Session Management Policy Control Service
+  Location: 90_Work-Telco/3GPP/Rel-19/29_series/
+  Scope: Npcf_SMPolicyControl service
+  Key Sections:
+    - Section 5.2: SM Policy procedures
+    - Section 6.1: API definitions
+
+3GPP TS 29.514 - Access and Mobility Policy Control Service
+  Location: 90_Work-Telco/3GPP/Rel-19/29_series/
+  Scope: Npcf_AMPolicyControl service
+
+3GPP TS 23.503 - Policy and Charging Control Framework
+  Location: 90_Work-Telco/3GPP/Rel-19/23_series/
+  Scope: PCC architecture and concepts
+
+
+================================================================================
+LINE-BY-LINE SPECIFICATION MAPPING
+================================================================================
+
+
+LINES 1-28: MODULE HEADER AND IMPORTS
+--------------------------------------------------------------------------------
+
+Lines 1-4: Module Documentation
+  Reference: Open5GS, Free5GC PCF
+  3GPP Specs: TS 29.507, TS 29.512, TS 29.514
+
+
+LINES 29-183: DATA MODELS
+--------------------------------------------------------------------------------
+
+Lines 31-57: class PolicyControlRequestTrigger(Enum)
+  Spec: TS 29.512 Section 6.1.6.3.6 - PolicyControlRequestTrigger
+
+  Triggers per TS 29.512:
+    - PLMN_CH: PLMN change
+    - RES_MO_RE: Resource modification request
+    - AC_TY_CH: Access type change
+    - UE_IP_CH: UE IP change
+    - QOS_NOTIF: QoS notification
+    - etc.
+
+Lines 59-67: class QosFlowUsage, FlowDirection(Enum)
+  Spec: TS 29.512 Section 6.1.6.3 - Enumerated types
+
+Lines 69-93: class Arp, Ambr, QosData
+  Spec: TS 29.512 Section 6.1.6.2 - QoS data types
+  Spec: TS 23.501 Section 5.7 - QoS model
+
+  QoS parameters per TS 29.512:
+    - fiveqi: 5G QoS Identifier (1-255)
+    - arp: Allocation and Retention Priority
+    - gbrUl/gbrDl: Guaranteed bit rates
+    - maxbrUl/maxbrDl: Maximum bit rates
+
+Lines 95-118: class FlowInformation, PccRule
+  Spec: TS 29.512 Section 6.1.6.2.10 - PccRule
+
+  PCC Rule structure per TS 23.503:
+    - pccRuleId: Unique identifier
+    - flowInfos: Flow descriptions
+    - precedence: Rule priority
+    - refQosData: Reference to QoS profile
+
+Lines 120-156: class SmPolicyContextData
+  Spec: TS 29.512 Section 6.1.6.2.2 - SmPolicyContextData
+
+  Context data sent by SMF:
+    - supi, gpsi: Subscriber identifiers
+    - pduSessionId: Session identifier
+    - dnn: Data Network Name
+    - accessType: 3GPP or non-3GPP
+    - servingNetwork: PLMN info
+
+Lines 159-182: class SmPolicyDecision
+  Spec: TS 29.512 Section 6.1.6.2.3 - SmPolicyDecision
+
+  Decision returned by PCF:
+    - pccRules: PCC rules to install
+    - qosDecs: QoS decisions
+    - chgDecs: Charging decisions
+    - traffContDecs: Traffic control decisions
+    - policyCtrlReqTriggers: Future triggers
+
+Lines 184-196: class AmPolicyData, PolicyAssociation
+  Spec: TS 29.514 Section 6.1.6.2 - AM Policy types
+
+
+LINES 198-443: PCF CLASS
+--------------------------------------------------------------------------------
+
+Lines 205-261: _initialize_default_policies()
+  Spec: TS 23.503 - Pre-defined PCC rules
+
+  Default QoS profiles:
+    - qos_internet: 5QI 9 (Best effort)
+    - qos_ims: 5QI 5 (IMS signalling)
+    - qos_video: 5QI 2 (Conversational video)
+    - qos_gaming: 5QI 83 (Low latency gaming)
+
+  Default PCC rules:
+    - rule_internet_default: Default traffic
+    - rule_ims_signalling: SIP traffic
+    - rule_video_streaming: Video apps
+    - rule_gaming: Gaming apps
+
+Lines 324-383: create_sm_policy_decision()
+  Spec: TS 29.512 Section 5.2.2.2 - SM Policy creation
+
+  Procedure per TS 29.512:
+    1. Determine applicable PCC rules based on:
+       - DNN
+       - Subscription data
+       - Network policies
+    2. Set policy control request triggers
+    3. Configure charging (online/offline)
+    4. Set revalidation time
+
+Lines 385-443: update_sm_policy_decision()
+  Spec: TS 29.512 Section 5.2.2.4 - SM Policy update
+
+  Handles triggers:
+    - RES_MO_RE: Resource modification
+    - APP_STA/APP_STO: Application start/stop
+    - QOS_NOTIF: QoS notification
+
+
+LINES 444-507: NRF REGISTRATION
+--------------------------------------------------------------------------------
+
+Lines 447-500: lifespan() - Startup/Shutdown
+  Spec: TS 29.510 - Nnrf_NFManagement service
+
+  NF Profile per TS 29.510:
+    - nfServices: npcf-smpolicycontrol, npcf-ampolicycontrol
+    - pcfInfo: DNN list, SUPI ranges, Rx Diameter info
+
+
+LINES 509-631: SM POLICY CONTROL ENDPOINTS
+--------------------------------------------------------------------------------
+
+Lines 510-554: create_sm_policy()
+  Spec: TS 29.512 Section 5.2.2.2.1 - Create SM Policy
+  Service: Npcf_SMPolicyControl
+  Operation: Create
+  Interface: N7 (SMF-PCF)
+
+  Procedure:
+    1. Receive SmPolicyContextData from SMF
+    2. Create policy association
+    3. Generate SmPolicyDecision
+    4. Return decision with PCC rules
+
+Lines 556-565: get_sm_policy()
+  Spec: TS 29.512 Section 5.2.2.3.1 - Get SM Policy
+
+Lines 567-604: update_sm_policy()
+  Spec: TS 29.512 Section 5.2.2.4.1 - Update SM Policy
+
+  Handles trigger-based updates
+
+Lines 606-631: delete_sm_policy()
+  Spec: TS 29.512 Section 5.2.2.5.1 - Delete SM Policy
+
+
+LINES 633-671: AM POLICY CONTROL ENDPOINTS
+--------------------------------------------------------------------------------
+
+Lines 634-671: create_am_policy()
+  Spec: TS 29.514 Section 5.2.2.2.1 - Create AM Policy
+  Service: Npcf_AMPolicyControl
+  Interface: N15 (AMF-PCF)
+
+
+LINES 673-753: MANAGEMENT AND HEALTH ENDPOINTS
+--------------------------------------------------------------------------------
+
+Lines 674-714: Policy rule management
+  Purpose: Administrative access to PCC rules and QoS data
+
+
+================================================================================
+SPECIFICATION CROSS-REFERENCE TABLE
+================================================================================
+
+| Code Section               | Primary Spec | Section        |
+|----------------------------|--------------|----------------|
+| PolicyControlRequestTrigger| TS 29.512    | 6.1.6.3.6      |
+| QosData                    | TS 29.512    | 6.1.6.2.7      |
+| PccRule                    | TS 29.512    | 6.1.6.2.10     |
+| SmPolicyContextData        | TS 29.512    | 6.1.6.2.2      |
+| SmPolicyDecision           | TS 29.512    | 6.1.6.2.3      |
+| AmPolicyData               | TS 29.514    | 6.1.6.2.2      |
+| create_sm_policy           | TS 29.512    | 5.2.2.2.1      |
+| update_sm_policy           | TS 29.512    | 5.2.2.4.1      |
+| delete_sm_policy           | TS 29.512    | 5.2.2.5.1      |
+| create_am_policy           | TS 29.514    | 5.2.2.2.1      |
+
+
+================================================================================
+5QI TABLE REFERENCE (TS 23.501)
+================================================================================
+
+| 5QI | Resource Type | Priority | Packet Delay | Packet Error | Example      |
+|-----|---------------|----------|--------------|--------------|--------------|
+| 1   | GBR           | 20       | 100ms        | 10^-2        | Voice        |
+| 2   | GBR           | 40       | 150ms        | 10^-3        | Video        |
+| 5   | GBR           | 10       | 100ms        | 10^-6        | IMS Signal   |
+| 9   | Non-GBR       | 90       | 300ms        | 10^-6        | TCP default  |
+| 83  | GBR (Delay)   | 22       | 10ms         | 10^-4        | Gaming       |
+
+
+================================================================================
+PCF INTERFACE MAPPING
+================================================================================
+
+| Interface | Connected NF | Service               | Purpose              |
+|-----------|--------------|----------------------|----------------------|
+| N7        | SMF          | Npcf_SMPolicyControl | Session policies     |
+| N15       | AMF          | Npcf_AMPolicyControl | AM policies          |
+| N5        | AF (via NEF) | Npcf_PolicyAuthorization | AF policies      |
+| N36       | UDR          | Nudr_DataRepository  | Policy data storage  |
+
+
+================================================================================
+                              END OF DOCUMENT
+================================================================================

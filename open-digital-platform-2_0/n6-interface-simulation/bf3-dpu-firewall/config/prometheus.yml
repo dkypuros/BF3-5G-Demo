@@ -1,0 +1,227 @@
+# Prometheus Configuration for N6 Interface Firewall Monitoring
+# Scrapes metrics from BlueField-3 DPU N6 firewall applications
+#
+# Copyright (c) 2024 NVIDIA Corporation
+# Version: 2.6.0
+
+global:
+  scrape_interval: 15s              # Set the scrape interval to every 15 seconds
+  evaluation_interval: 15s          # Evaluate rules every 15 seconds
+  external_labels:
+    cluster: 'n6-firewall-cluster'
+    region: 'production'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - alertmanager:9093
+
+# Load rules once and periodically evaluate them according to the global 'evaluation_interval'
+rule_files:
+  - "alert_rules.yml"
+  - "recording_rules.yml"
+
+# Scrape configuration
+scrape_configs:
+  # N6 Firewall Application Metrics
+  - job_name: 'n6-firewall'
+    static_configs:
+      - targets: 
+          - 'bluefield-01:9090'   # BlueField-3 DPU #1
+          - 'bluefield-02:9090'   # BlueField-3 DPU #2
+          - 'bluefield-03:9090'   # BlueField-3 DPU #3
+    scrape_interval: 5s             # High frequency for real-time monitoring
+    scrape_timeout: 4s
+    metrics_path: /metrics
+    scheme: http
+    params:
+      format: ['prometheus']
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: 'n6-firewall'
+          component: 'main'
+          environment: 'production'
+
+  # DOCA Flow Hardware Metrics
+  - job_name: 'doca-flow-stats'
+    static_configs:
+      - targets: 
+          - 'bluefield-01:9091'   # DOCA Flow stats endpoint
+          - 'bluefield-02:9091'
+          - 'bluefield-03:9091'
+    scrape_interval: 10s
+    metrics_path: /doca/flow/metrics
+    static_configs:
+      - targets: ['localhost:9091']
+        labels:
+          service: 'doca-flow'
+          component: 'hardware'
+
+  # System Metrics (Node Exporter)
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets:
+          - 'bluefield-01:9100'   # Node exporter on each DPU
+          - 'bluefield-02:9100'
+          - 'bluefield-03:9100'
+    scrape_interval: 15s
+    static_configs:
+      - targets: ['localhost:9100']
+        labels:
+          service: 'node-exporter'
+          component: 'system'
+
+  # BlueField DPU Hardware Metrics
+  - job_name: 'bluefield-hardware'
+    static_configs:
+      - targets:
+          - 'bluefield-01:9102'   # BlueField hardware metrics
+          - 'bluefield-02:9102'
+          - 'bluefield-03:9102'
+    scrape_interval: 30s
+    metrics_path: /hardware/metrics
+    static_configs:
+      - targets: ['localhost:9102']
+        labels:
+          service: 'bluefield-hardware'
+          component: 'dpu'
+
+  # 5G UPF Metrics (if available)
+  - job_name: '5g-upf'
+    static_configs:
+      - targets:
+          - '5g-upf-01:9103'      # 5G UPF metrics endpoint
+          - '5g-upf-02:9103'
+    scrape_interval: 30s
+    metrics_path: /upf/metrics
+    honor_labels: true
+    static_configs:
+      - targets: ['upf-server:9103']
+        labels:
+          service: '5g-upf'
+          component: 'core-network'
+
+  # Data Network Monitoring
+  - job_name: 'data-network'
+    static_configs:
+      - targets:
+          - 'dn-gateway-01:9104'  # Data Network gateway metrics
+          - 'dn-gateway-02:9104'
+    scrape_interval: 60s
+    metrics_path: /network/metrics
+    static_configs:
+      - targets: ['dn-gateway:9104']
+        labels:
+          service: 'data-network'
+          component: 'gateway'
+
+  # Application Health Checks
+  - job_name: 'n6-firewall-health'
+    static_configs:
+      - targets:
+          - 'bluefield-01:8080'   # Health check endpoints
+          - 'bluefield-02:8080'
+          - 'bluefield-03:8080'
+    scrape_interval: 30s
+    metrics_path: /health
+    scheme: http
+    static_configs:
+      - targets: ['localhost:8080']
+        labels:
+          service: 'n6-firewall'
+          component: 'health'
+
+  # Prometheus Self-Monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+    scrape_interval: 15s
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: 'prometheus'
+          component: 'monitoring'
+
+# Remote write configuration for long-term storage
+remote_write:
+  - url: "https://prometheus-remote-storage:9201/write"
+    write_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'n6_.*'
+        target_label: __tmp_n6_metric
+        replacement: 'true'
+      - source_labels: [__tmp_n6_metric]
+        regex: 'true'
+        action: keep
+
+# Remote read configuration
+remote_read:
+  - url: "https://prometheus-remote-storage:9201/read"
+
+# Storage configuration
+storage:
+  tsdb:
+    retention.time: 30d             # Keep data for 30 days locally
+    retention.size: 100GB           # Maximum storage size
+    wal-compression: true           # Compress WAL files
+    min-block-duration: 2h         # Minimum block duration
+    max-block-duration: 24h        # Maximum block duration
+
+# Additional scrape configurations for development/testing
+scrape_configs_dev:
+  # Development N6 Firewall (if running in test mode)
+  - job_name: 'n6-firewall-dev'
+    static_configs:
+      - targets: ['localhost:9090']
+    scrape_interval: 5s
+    honor_labels: true
+    metrics_path: /metrics
+    params:
+      debug: ['true']
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: 'n6-firewall'
+          component: 'main'
+          environment: 'development'
+
+# Metric relabeling rules
+metric_relabel_configs:
+  # Add cluster and region labels to all metrics
+  - target_label: cluster
+    replacement: 'n6-firewall-prod'
+  
+  # Rename some metrics for consistency
+  - source_labels: [__name__]
+    regex: 'doca_flow_(.+)'
+    target_label: __name__
+    replacement: 'n6_doca_${1}'
+  
+  # Drop high-cardinality metrics in production
+  - source_labels: [__name__]
+    regex: 'n6_packet_.*_per_second_bucket'
+    action: drop
+  
+  # Keep only essential hardware counter metrics
+  - source_labels: [__name__, counter_type]
+    regex: 'n6_hardware_counter;(rx_packets|tx_packets|rx_bytes|tx_bytes|errors)'
+    action: keep
+
+# Federation configuration (if using multiple Prometheus instances)
+federation:
+  - job_name: 'federate-n6-metrics'
+    scrape_interval: 30s
+    honor_labels: true
+    metrics_path: '/federate'
+    params:
+      'match[]':
+        - '{__name__=~"n6_.*"}'
+        - '{__name__=~"doca_.*"}'
+        - '{__name__=~"bluefield_.*"}'
+    static_configs:
+      - targets:
+        - 'prometheus-region-1:9090'
+        - 'prometheus-region-2:9090'

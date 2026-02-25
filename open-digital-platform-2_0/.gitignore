@@ -1,0 +1,98 @@
+# Discussion files and meeting notes
+discussion/
+discussions/
+meeting_notes/
+notes/
+*.discussion
+*.notes
+
+# 3GPP specifications and sensitive documents
+3GGP_spec/
+*.3gpp
+*.3gpp.zip
+
+# Demo frontend files
+demo_front-end/
+frontend_demo/
+web_demo/
+ui_demo/
+
+# Virtual environments
+venv/
+env/
+.env
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Build artifacts
+*.o
+*.so
+*.a
+build/
+bin/
+obj/
+
+# Logs
+*.log
+logs/
+/var/log/
+
+# Temporary files
+*.tmp
+*.temp
+.tmp/
+temp/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Package files
+*.tar.gz
+*.zip
+*.rar
+*.7z
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Configuration backups
+*.conf.bak
+*.config.backup
+
+# Test output
+test_output/
+test_results/
+*.pcap
+*.dump
+
+# Certificates and keys
+*.pem
+*.key
+*.crt
+*.cert
+
+# Sensitive data
+secrets/
+credentials/
+.env.local
+.env.production

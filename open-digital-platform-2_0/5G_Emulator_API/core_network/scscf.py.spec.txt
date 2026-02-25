@@ -1,0 +1,343 @@
+================================================================================
+                    SPECIFICATION MAP: scscf.py
+         Serving Call Session Control Function - Spec Reference Bridge
+================================================================================
+
+Source File: 5G_Emulator_API/core_network/scscf.py
+Generated:   2026-01-10
+Lines:       1094
+Purpose:     Map each code section to governing 3GPP specifications
+Based On:    Kamailio ims_registrar_scscf, ims_auth, ims_isc modules
+
+================================================================================
+PRIMARY GOVERNING SPECIFICATIONS
+================================================================================
+
+3GPP TS 24.229 - IP Multimedia Call Control Protocol
+  Location: 90_Work-Telco/3GPP/Rel-19/24_series/24229-j41.doc
+  Scope: SIP-based call control procedures for IMS
+  Key Sections:
+    - Section 5.4: S-CSCF procedures
+    - Section 5.4.1: Registration
+    - Section 5.4.3: Session originating
+    - Section 5.4.4: Session terminating
+
+3GPP TS 29.228 - Cx and Dx Interfaces Based on Diameter
+  Location: 90_Work-Telco/3GPP/Rel-19/29_series/29228-j10.docx
+  Scope: S-CSCF to HSS communication
+  Key Sections:
+    - Section 6.3: Multimedia-Auth (MAR/MAA)
+    - Section 6.4: Server-Assignment (SAR/SAA)
+
+3GPP TS 29.229 - Cx and Dx Interfaces: Signalling Flows
+  Location: 90_Work-Telco/3GPP/Rel-19/29_series/29229-j00.docx
+  Scope: Diameter AVPs and authentication schemes
+
+3GPP TS 33.203 - Access Security for IP-based Services
+  Location: 90_Work-Telco/3GPP/Rel-19/33_series/ (if available)
+  Scope: IMS AKA authentication
+
+KAMAILIO SOURCE REFERENCE:
+  Module: kamailio/src/modules/ims_registrar_scscf/
+  Key Files: save.c, lookup.c, registrar.c
+  Module: kamailio/src/modules/ims_auth/
+  Key Files: authorize.c, challenge.c
+  Module: kamailio/src/modules/ims_isc/
+  Key Files: isc.c, third_party_reg.c
+
+
+================================================================================
+LINE-BY-LINE SPECIFICATION MAPPING
+================================================================================
+
+
+LINES 1-27: MODULE HEADER AND FASTAPI SETUP
+--------------------------------------------------------------------------------
+
+Lines 1-4: Module Documentation
+  Reference: Kamailio ims_registrar_scscf, ims_auth, ims_isc
+  3GPP Specs: TS 24.229 Section 5.4, TS 29.228/229
+
+
+LINES 29-179: DATA MODELS
+--------------------------------------------------------------------------------
+
+Lines 33-38: class RegistrationState(Enum)
+  Spec: TS 24.229 Section 5.4.1 - Registration states
+
+Lines 40-47: class AuthScheme(Enum)
+  Spec: TS 29.229 Section 6.3.20 - SIP-Authentication-Scheme AVP
+  Spec: TS 33.203 - Authentication mechanisms
+
+  Schemes:
+    - Digest-AKAv1-MD5: Default IMS AKA
+    - Digest-AKAv2-MD5: Enhanced AKA
+    - Early-IMS-Security: Pre-IMS deployment
+    - NASS-Bundled: Fixed access
+
+Lines 49-57: class ServiceProfile(BaseModel)
+  Spec: TS 29.228 Section 6.5.1 - User-Data AVP (Service-Profile)
+  Kamailio: Service profile from SAA
+
+Lines 59-67: class AuthVector(BaseModel)
+  Spec: TS 29.229 Section 6.3.5 - SIP-Auth-Data-Item AVP
+  Spec: TS 33.203 - AKA authentication vector
+
+  Fields per TS 29.229:
+    - SIP-Item-Number
+    - SIP-Authentication-Scheme
+    - SIP-Authenticate (RAND || AUTN)
+    - SIP-Authorization (XRES)
+    - Confidentiality-Key (CK)
+    - Integrity-Key (IK)
+
+Lines 69-111: class ScscfContact, ScscfUserRecord
+  Spec: TS 24.229 Section 5.4.1.2 - Contact storage
+  Kamailio: ims_usrloc_scscf/usrloc.h
+
+Lines 113-149: SIP Models
+  Spec: RFC 3261, TS 24.229 IMS extensions
+
+Lines 151-178: class SARRequest/SARResponse, MARRequest/MARResponse
+  Spec: TS 29.228 Section 6.3 (MAR), Section 6.4 (SAR)
+
+
+LINES 180-274: USER LOCATION STORAGE
+--------------------------------------------------------------------------------
+
+Lines 184-272: class ScscfUsrLoc
+  Spec: TS 24.229 Section 5.4.1 - User location at S-CSCF
+  Kamailio: ims_usrloc_scscf/usrloc.c
+
+  Methods:
+    - save_contact: Store registration (TS 24.229 5.4.1.2)
+    - lookup_contact: Find contacts for routing (TS 24.229 5.4.3.2)
+    - store_auth_vectors: Cache auth vectors from MAA
+    - get_auth_vector: Retrieve for challenge verification
+
+
+LINES 276-323: S-CSCF CONFIGURATION AND SAR TYPES
+--------------------------------------------------------------------------------
+
+Lines 280-300: class ScscfConfig
+  Spec: TS 24.229 Section 5.4 - S-CSCF configuration
+  Kamailio: scscf.cfg
+
+Lines 307-322: class ServerAssignmentType(Enum)
+  Spec: TS 29.229 Section 6.3.15 - Server-Assignment-Type AVP
+
+  Values per 3GPP:
+    - 1: REGISTRATION - Initial registration
+    - 2: RE_REGISTRATION - Re-registration
+    - 3: UNREGISTERED_USER - Terminating unregistered
+    - 4: TIMEOUT_DEREGISTRATION - Timer expiry
+    - 5: USER_DEREGISTRATION - REGISTER with Expires:0
+
+
+LINES 324-391: CX INTERFACE - HSS COMMUNICATION
+--------------------------------------------------------------------------------
+
+Lines 324-351: send_sar_to_hss()
+  Spec: TS 29.228 Section 6.4 - Server Assignment
+  Kamailio: cxdx_sar.c
+
+  SAR usage per TS 29.228:
+    - On registration: type=REGISTRATION/RE_REGISTRATION
+    - On de-registration: type=USER_DEREGISTRATION
+    - On timeout: type=TIMEOUT_DEREGISTRATION
+
+Lines 353-390: send_mar_to_hss()
+  Spec: TS 29.228 Section 6.3 - Multimedia Auth
+  Kamailio: cxdx_mar.c
+
+  MAR usage:
+    - Before sending 401 challenge
+    - Request SIP-Auth-Data-Items from HSS
+    - Get CK/IK for IPSec (if used)
+
+
+LINES 392-451: AUTHENTICATION FUNCTIONS
+--------------------------------------------------------------------------------
+
+Lines 396-414: parse_authorization_header()
+  Spec: RFC 2617 - HTTP Digest Authentication
+  Spec: RFC 3310 - AKA Digest Authentication
+
+Lines 416-419: generate_nonce()
+  Spec: RFC 2617 - Nonce generation
+
+Lines 421-433: build_www_authenticate()
+  Spec: TS 24.229 Section 5.4.1.2.2 - 401 challenge
+  Spec: RFC 3310 - AKA parameters
+
+  Header format for AKA:
+    WWW-Authenticate: Digest realm="...", nonce="RAND||AUTN",
+                      algorithm=AKAv1-MD5, qop="auth"
+
+Lines 435-450: verify_digest_response()
+  Spec: RFC 2617 - Response verification
+  Kamailio: ims_auth/authorize.c - check_response()
+
+
+LINES 452-505: INITIAL FILTER CRITERIA (IFC)
+--------------------------------------------------------------------------------
+
+Lines 456-505: evaluate_ifc()
+  Spec: TS 24.229 Section 5.4.3.2/5.4.4.2 - iFC evaluation
+  Spec: TS 29.228 Section 6.5.2 - Initial-Filter-Criteria AVP
+  Kamailio: ims_isc/isc.c
+
+  iFC structure per TS 29.228:
+    - Priority: Order of evaluation
+    - Trigger Point: Conditions (method, headers, etc.)
+    - Application Server: URI to route to
+    - Default Handling: Action on AS failure
+
+  Evaluation per TS 24.229:
+    1. Get iFCs from service profile
+    2. For each iFC by priority:
+       a. Check trigger point conditions
+       b. If match, add AS to route set
+
+
+LINES 507-738: SIP REGISTER HANDLER
+--------------------------------------------------------------------------------
+
+Lines 511-738: handle_register()
+  Spec: TS 24.229 Section 5.4.1 - Registration at S-CSCF
+  Kamailio: scscf REGISTER route, save()
+
+  Full procedure per TS 24.229 Section 5.4.1.2:
+
+  Lines 536-564: De-registration (Expires:0)
+    Spec: TS 24.229 Section 5.4.1.5 - User-initiated de-registration
+    - Send SAR with type=USER_DEREGISTRATION
+    - Delete contacts
+    - Return 200 OK
+
+  Lines 569-630: First REGISTER (no Authorization)
+    Spec: TS 24.229 Section 5.4.1.2.2 - Challenge
+    - Send MAR to HSS
+    - Get authentication vectors
+    - Build 401 with WWW-Authenticate
+
+  Lines 632-662: Second REGISTER (with credentials)
+    Spec: TS 24.229 Section 5.4.1.2.3 - Verify response
+    - Verify digest response against XRES
+    - On failure: 403 Forbidden
+
+  Lines 664-738: Registration success
+    Spec: TS 24.229 Section 5.4.1.2.4 - Complete registration
+    - Send SAR with type=REGISTRATION
+    - Get service profile from SAA
+    - Store contact
+    - Return 200 OK with:
+      - Service-Route (5.4.1.2.4)
+      - P-Associated-URI (5.4.1.2.4)
+
+
+LINES 740-890: SIP INVITE HANDLERS
+--------------------------------------------------------------------------------
+
+Lines 740-826: handle_invite()
+  Spec: TS 24.229 Section 5.4.3 (originating), 5.4.4 (terminating)
+  Kamailio: scscf INVITE route
+
+  Originating (Lines 759-809):
+    Spec: TS 24.229 Section 5.4.3.2
+    1. Verify caller is registered
+    2. Assert P-Asserted-Identity
+    3. Evaluate originating iFCs
+    4. Route through ASs or to callee
+
+  Terminating (Lines 811-826):
+    Spec: TS 24.229 Section 5.4.4.2
+    1. Find called user
+    2. Evaluate terminating iFCs
+    3. Route to contacts (fork if multiple)
+
+Lines 828-890: process_terminating_invite()
+  Spec: TS 24.229 Section 5.4.4.2
+  - Check registration status
+  - Apply terminating iFCs
+  - Lookup contacts and route
+
+
+LINES 892-961: OTHER SIP HANDLERS
+--------------------------------------------------------------------------------
+
+Lines 927-961: handle_subscribe()
+  Spec: TS 24.229 Section 5.4.2 - SUBSCRIBE handling
+  Spec: RFC 3265 - SIP Specific Event Notification
+
+  For "reg" event package per RFC 3680
+
+
+LINES 963-1052: MANAGEMENT APIS
+--------------------------------------------------------------------------------
+
+Lines 981-1051: User management endpoints
+  Purpose: Administrative access to S-CSCF data
+
+  Endpoints:
+    - GET /users: List registered users
+    - GET /users/{impu}: User details with contacts
+    - DELETE /users/{impu}: Administrative removal
+
+
+LINES 1053-1094: HEALTH AND STARTUP
+--------------------------------------------------------------------------------
+
+Lines 1057-1074: root endpoint (/)
+  Returns S-CSCF statistics:
+    - Registered users
+    - Total contacts
+    - HSS connectivity
+
+Lines 1076-1079: health endpoint (/health)
+  Standard health check
+
+Lines 1085-1093: Main entry point
+  Starts on port 9032
+
+
+================================================================================
+SPECIFICATION CROSS-REFERENCE TABLE
+================================================================================
+
+| Code Section            | Primary Spec      | Section        |
+|-------------------------|-------------------|----------------|
+| RegistrationState       | TS 24.229         | 5.4.1          |
+| AuthScheme              | TS 29.229         | 6.3.20         |
+| AuthVector              | TS 29.229         | 6.3.5          |
+| ServiceProfile          | TS 29.228         | 6.5.1          |
+| ServerAssignmentType    | TS 29.229         | 6.3.15         |
+| ScscfUsrLoc             | TS 24.229         | 5.4.1          |
+| send_mar_to_hss         | TS 29.228         | 6.3            |
+| send_sar_to_hss         | TS 29.228         | 6.4            |
+| build_www_authenticate  | TS 24.229         | 5.4.1.2.2      |
+| verify_digest_response  | RFC 2617          | Section 3.2.2  |
+| evaluate_ifc            | TS 24.229         | 5.4.3.2        |
+| handle_register         | TS 24.229         | 5.4.1          |
+| handle_invite           | TS 24.229         | 5.4.3/5.4.4    |
+
+
+================================================================================
+KAMAILIO SOURCE MAPPING
+================================================================================
+
+| Python Class/Function   | Kamailio File       | Function/Route   |
+|-------------------------|---------------------|------------------|
+| ScscfUsrLoc             | usrloc.c            | ul_* functions   |
+| send_mar_to_hss         | cxdx_mar.c          | scscf_get_auth() |
+| send_sar_to_hss         | cxdx_sar.c          | scscf_save()     |
+| build_www_authenticate  | challenge.c         | build_challenge()|
+| verify_digest_response  | authorize.c         | check_response() |
+| evaluate_ifc            | isc.c               | isc_match_filter_reg() |
+| handle_register         | Route[REGISTER]     | scscf.cfg        |
+| handle_invite           | Route[INVITE]       | scscf.cfg        |
+
+
+================================================================================
+                              END OF DOCUMENT
+================================================================================

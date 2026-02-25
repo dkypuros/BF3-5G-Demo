@@ -1,0 +1,322 @@
+================================================================================
+                    SPECIFICATION MAP: hss.py
+           Home Subscriber Server - Spec Reference Bridge
+================================================================================
+
+Source File: 5G_Emulator_API/core_network/hss.py
+Generated:   2026-01-10
+Lines:       785
+Purpose:     Map each code section to governing 3GPP specifications
+Based On:    Open5GS HSS implementation
+
+================================================================================
+PRIMARY GOVERNING SPECIFICATIONS
+================================================================================
+
+3GPP TS 29.272 - MME and SGSN Related Interfaces Based on Diameter
+  Location: 90_Work-Telco/3GPP/Rel-19/29_series/
+  Scope: S6a interface (MME <-> HSS)
+  Key Sections:
+    - Section 5: Procedures
+    - Section 7: AVPs
+    - Section 8: Result codes
+
+3GPP TS 33.401 - EPS Security Architecture
+  Location: 90_Work-Telco/3GPP/Rel-19/33_series/
+  Scope: Authentication and key derivation
+  Key Sections:
+    - Section 6.1: EPS AKA
+    - Annex A: Key derivation functions
+
+3GPP TS 35.206 - Milenage Algorithm
+  Location: 90_Work-Telco/3GPP/Rel-19/35_series/
+  Scope: f1-f5 algorithm implementation
+
+3GPP TS 23.008 - Organization of Subscriber Data
+  Location: 90_Work-Telco/3GPP/Rel-19/23_series/
+  Scope: Subscription data structure
+
+
+================================================================================
+LINE-BY-LINE SPECIFICATION MAPPING
+================================================================================
+
+
+LINES 1-37: MODULE HEADER AND IMPORTS
+--------------------------------------------------------------------------------
+
+Lines 1-5: Module Documentation
+  Reference: Open5GS HSS
+  3GPP Specs: TS 29.272
+
+
+LINES 38-147: DATA MODELS
+--------------------------------------------------------------------------------
+
+Lines 42-47: class SubscriberStatus(Enum)
+  Spec: TS 29.272 - Subscriber status
+
+Lines 48-53: class NetworkAccessMode(Enum)
+  Spec: TS 29.272 Section 7.3.21 - Network-Access-Mode AVP
+
+  Modes:
+    - PACKET_ONLY: PS services only
+    - CIRCUIT_ONLY: CS services only
+    - PACKET_AND_CIRCUIT: PS + CS
+
+Lines 54-63: class ApnConfiguration
+  Spec: TS 29.272 Section 7.3.35 - APN-Configuration AVP
+
+  Contains:
+    - APN, PDN type
+    - QCI, ARP
+    - AMBR
+
+Lines 64-71: class AuthenticationKey
+  Spec: TS 33.401 Section 6.1 - Authentication credentials
+
+  USIM parameters:
+    - K: Subscriber key (128-bit)
+    - OPc: Derived operator constant
+    - AMF: Authentication Management Field
+    - SQN: Sequence Number
+
+Lines 72-104: class SubscriptionData
+  Spec: TS 29.272 Section 7.3.2 - Subscription-Data AVP
+  Spec: TS 23.008 - Subscriber data organization
+
+  Full subscriber profile:
+    - Identifiers (IMSI, MSISDN, IMEI)
+    - Authentication credentials
+    - APN configurations
+    - Subscribed AMBR
+    - Serving MME info
+
+Lines 106-146: Diameter S6a Message Models
+  Spec: TS 29.272 Section 5 - S6a procedures
+
+  AIR/AIA: Authentication Information Request/Answer
+  ULR/ULA: Update Location Request/Answer
+  PUR: Purge UE Request
+
+
+LINES 148-267: MILENAGE ALGORITHM
+--------------------------------------------------------------------------------
+
+Lines 152-166: Helper functions
+  - aes_encrypt(): AES-128 (simplified)
+  - xor_bytes(): Byte XOR
+  - rotate_bytes(): Byte rotation
+
+Lines 167-187: milenage_f1()
+  Spec: TS 35.206 Section 4.1 - f1 and f1* functions
+
+  Computes:
+    - MAC-A: Network authentication code
+    - MAC-S: Resync authentication code
+
+  Algorithm:
+    temp = AES_K(RAND XOR OPc)
+    IN1 = SQN || AMF || SQN || AMF
+    OUT1 = AES_K(rot(temp XOR OPc XOR IN1, r1) XOR c1) XOR OPc
+    MAC-A = OUT1[0..63]
+
+Lines 189-222: milenage_f2345()
+  Spec: TS 35.206 Section 4.1 - f2, f3, f4, f5 functions
+
+  Computes:
+    - RES (f2): Expected response
+    - CK (f3): Cipher Key
+    - IK (f4): Integrity Key
+    - AK (f5): Anonymity Key
+
+Lines 224-238: derive_kasme()
+  Spec: TS 33.401 Annex A.2 - KASME derivation
+
+  KASME = KDF(CK||IK, FC||PLMN_ID||SQN^AK)
+
+Lines 240-267: generate_auth_vector()
+  Spec: TS 33.401 Section 6.1.2 - EPS AV generation
+
+  Generates:
+    - RAND: Random challenge
+    - XRES: Expected response
+    - AUTN: Authentication token (SQN^AK || AMF || MAC-A)
+    - KASME: Key for ASME
+
+
+LINES 269-368: HSS CONTEXT MANAGER
+--------------------------------------------------------------------------------
+
+Lines 273-298: class HssContext.__init__
+  Configuration:
+    - HSS identity
+    - Realm (Diameter identity)
+    - Default authentication keys
+    - Statistics
+
+Lines 300-331: _init_test_subscribers()
+  Initializes 10 test subscribers with:
+    - Sequential IMSIs
+    - Default K and OPc
+    - internet and ims APNs
+
+Lines 333-364: Subscriber management methods
+  - add_subscriber()
+  - get_subscriber() / get_subscriber_by_msisdn()
+  - update_subscriber_location()
+  - increment_sqn()
+
+
+LINES 370-394: HEALTH AND CONFIGURATION
+--------------------------------------------------------------------------------
+
+Lines 374-394: Health and configuration endpoints
+
+
+LINES 395-591: S6A INTERFACE (MME <-> HSS)
+--------------------------------------------------------------------------------
+
+Lines 399-454: authentication_information_request()
+  Spec: TS 29.272 Section 5.2.3.1 - AIR/AIA
+
+  Procedure per TS 29.272:
+    1. Validate subscriber exists
+    2. Check subscriber status
+    3. Handle resync if needed
+    4. Get authentication credentials
+    5. Generate requested auth vectors
+    6. Return AIA with vectors
+
+  Result codes:
+    - 2001: DIAMETER_SUCCESS
+    - 5001: DIAMETER_ERROR_USER_UNKNOWN
+    - 5004: DIAMETER_ERROR_ROAMING_NOT_ALLOWED
+
+Lines 456-516: update_location_request()
+  Spec: TS 29.272 Section 5.2.1.1 - ULR/ULA
+
+  Procedure:
+    1. Validate subscriber
+    2. Update serving MME
+    3. Return subscription data:
+       - MSISDN
+       - Network access mode
+       - RAU/TAU timer
+       - APN configurations
+       - Subscribed AMBR
+
+Lines 518-544: purge_ue_request()
+  Spec: TS 29.272 Section 5.2.2.1 - PUR
+
+  Clears MME registration for detached UE
+
+Lines 546-570: cancel_location_request()
+  Spec: TS 29.272 Section 5.2.1.2 - CLR
+
+  HSS-initiated cancel at old MME during:
+    - MME update procedure
+    - Subscription withdrawal
+
+Lines 572-590: insert_subscriber_data_request()
+  Spec: TS 29.272 Section 5.2.1.3 - IDR
+
+  HSS pushes updated subscription data
+
+
+LINES 592-768: SUBSCRIBER MANAGEMENT
+--------------------------------------------------------------------------------
+
+Lines 596-652: Subscriber query endpoints
+  - list_subscribers()
+  - get_subscriber()
+
+Lines 654-683: create_subscriber()
+  Creates new subscriber with:
+    - Authentication credentials
+    - Default APN configuration
+
+Lines 685-717: update_subscriber()
+  Updates:
+    - MSISDN
+    - Status
+    - Subscribed AMBR
+
+Lines 719-754: delete_subscriber() / add_apn_configuration()
+
+Lines 756-768: get_statistics()
+  Returns:
+    - Subscriber counts
+    - Procedure statistics
+
+
+================================================================================
+SPECIFICATION CROSS-REFERENCE TABLE
+================================================================================
+
+| Code Section              | Primary Spec | Section        |
+|---------------------------|--------------|----------------|
+| SubscriberStatus          | TS 29.272    | -              |
+| NetworkAccessMode         | TS 29.272    | 7.3.21         |
+| ApnConfiguration          | TS 29.272    | 7.3.35         |
+| AuthenticationKey         | TS 33.401    | 6.1            |
+| SubscriptionData          | TS 29.272    | 7.3.2          |
+| AuthInfoRequest (AIR)     | TS 29.272    | 5.2.3.1        |
+| UpdateLocationRequest     | TS 29.272    | 5.2.1.1        |
+| PurgeUeRequest            | TS 29.272    | 5.2.2.1        |
+| CancelLocationRequest     | TS 29.272    | 5.2.1.2        |
+| milenage_f1               | TS 35.206    | 4.1            |
+| milenage_f2345            | TS 35.206    | 4.1            |
+| derive_kasme              | TS 33.401    | Annex A.2      |
+| generate_auth_vector      | TS 33.401    | 6.1.2          |
+
+
+================================================================================
+EPS AKA PROCEDURE (TS 33.401)
+================================================================================
+
+    UE              MME              HSS
+     |               |                |
+     |--Attach Req-->|                |
+     |               |--AIR---------->|
+     |               |                | Generate AVs
+     |               |<--AIA----------|
+     |<--Auth Req----|                |
+     |               |                |
+     | UE computes   |                |
+     | RES, KASME    |                |
+     |               |                |
+     |--Auth Resp--->|                |
+     |               | Verify RES     |
+     |               | Derive keys    |
+     |<--Auth Accept-|                |
+
+
+================================================================================
+HSS INTERFACE MAPPING
+================================================================================
+
+| Interface | Connected NF | Protocol | Purpose                    |
+|-----------|--------------|----------|----------------------------|
+| S6a       | MME          | Diameter | Authentication/Subscription|
+| S6d       | SGSN         | Diameter | 2G/3G authentication       |
+| Cx        | I/S-CSCF     | Diameter | IMS authentication         |
+| Sh        | AS           | Diameter | Service data               |
+
+
+================================================================================
+DIAMETER RESULT CODES (TS 29.272)
+================================================================================
+
+| Code | Name                              | Description                |
+|------|-----------------------------------|----------------------------|
+| 2001 | DIAMETER_SUCCESS                  | Request succeeded          |
+| 5001 | DIAMETER_ERROR_USER_UNKNOWN       | IMSI not found             |
+| 5004 | DIAMETER_ERROR_ROAMING_NOT_ALLOWED| Subscriber suspended       |
+| 5012 | DIAMETER_UNABLE_TO_COMPLY         | General error              |
+| 5420 | DIAMETER_ERROR_UNKNOWN_EPS_SUBSCRIPTION| No EPS subscription   |
+
+
+================================================================================
+                              END OF DOCUMENT
+================================================================================

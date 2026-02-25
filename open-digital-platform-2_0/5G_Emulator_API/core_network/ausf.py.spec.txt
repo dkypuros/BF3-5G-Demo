@@ -1,0 +1,236 @@
+================================================================================
+                    SPECIFICATION MAP: ausf.py
+         Authentication Server Function - Spec Reference Bridge
+================================================================================
+
+Source File: 5G_Emulator_API/core_network/ausf.py
+Generated:   2026-01-10
+Lines:       411
+Purpose:     Map each code section to governing 3GPP specifications
+Based On:    Open5GS, Free5GC AUSF implementations
+
+================================================================================
+PRIMARY GOVERNING SPECIFICATIONS
+================================================================================
+
+3GPP TS 29.509 - Authentication Server Function Services
+  Location: 90_Work-Telco/3GPP/Rel-19/29_series/
+  Scope: Nausf_UEAuthentication service procedures
+  Key Sections:
+    - Section 5.2.2.2: UE Authentication procedures
+    - Section 6.1: API definitions
+
+3GPP TS 33.501 - Security Architecture and Procedures for 5G System
+  Location: 90_Work-Telco/3GPP/Rel-19/33_series/
+  Scope: 5G-AKA and EAP-AKA' authentication procedures
+  Key Sections:
+    - Section 6.1: Primary authentication
+    - Section 6.1.3: 5G-AKA
+    - Annex A: Key derivation functions
+
+3GPP TS 29.510 - NRF NF Management Service
+  Location: 90_Work-Telco/3GPP/Rel-19/29_series/29510-j30.docx
+  Scope: NF registration with NRF
+
+
+================================================================================
+LINE-BY-LINE SPECIFICATION MAPPING
+================================================================================
+
+
+LINES 1-28: MODULE HEADER AND IMPORTS
+--------------------------------------------------------------------------------
+
+Lines 1-3: Module Documentation
+  Reference: Open5GS, Free5GC AUSF
+  3GPP Specs: TS 29.509, TS 33.501
+
+Lines 5-16: Imports
+  - secrets: For RAND generation per TS 33.501
+  - hashlib: For key derivation functions
+
+
+LINES 29-64: DATA MODELS
+--------------------------------------------------------------------------------
+
+Lines 30-36: class PlmnId, SnssaiInfo
+  Spec: TS 29.571 - Common Data Types
+  Standard identifiers for PLMN and slice
+
+Lines 38-42: class AuthenticationRequest
+  Spec: TS 29.509 Section 6.1.3.2.2 - AuthenticationInfo
+
+  Fields per TS 29.509:
+    - supiOrSuci: Subscriber identifier
+    - servingNetworkName: SN name for key derivation
+    - resynchronizationInfo: For SQN resync
+
+Lines 44-48: class AuthenticationVector
+  Spec: TS 29.509 Section 6.1.6.2.2 - Av5gAka
+  Spec: TS 33.501 Section 6.1.3.2 - AV structure
+
+  Fields:
+    - rand: Random challenge (128 bits)
+    - autn: Authentication token
+    - hxresstar: Expected response hash
+    - kausf: AUSF anchor key
+
+Lines 50-54: class AuthenticationInfoResult
+  Spec: TS 29.509 Section 6.1.3.2.3 - UeAuthenticationCtx
+
+Lines 56-63: ConfirmationData, ConfirmationDataResponse
+  Spec: TS 29.509 Section 6.1.3.3 - Confirmation procedures
+
+
+LINES 66-147: AUSF CLASS
+--------------------------------------------------------------------------------
+
+Lines 68-72: class AUSF.__init__
+  Spec: TS 29.509 Section 6.2.1 - AUSF info
+
+  Attributes:
+    - supported_auth_types: 5G_AKA, EAP_AKA_PRIME per TS 33.501
+
+Lines 74-97: get_authentication_vectors_from_udm()
+  Spec: TS 29.509 Section 5.2.2.2.1 - Get vectors from UDM
+  Spec: TS 29.503 - Nudm_UEAuthentication service
+  Interface: N13 (AUSF-UDM)
+
+  Procedure:
+    1. Build authentication request
+    2. Call UDM Nudm_UEAU service
+    3. Receive authentication vectors
+
+Lines 99-126: generate_5g_aka_vectors()
+  Spec: TS 33.501 Section 6.1.3 - 5G-AKA
+  Spec: TS 33.501 Annex A - Key derivation
+
+  Generates:
+    - RAND: 128-bit random (line 105)
+    - AUTN: SQN^AK || AMF || MAC (lines 108-113)
+    - HXRES*: Hash of expected response (line 116)
+    - KAUSF: Anchor key (line 119)
+
+Lines 128-132: derive_kseaf()
+  Spec: TS 33.501 Annex A.6 - KSEAF derivation
+
+  KSEAF = KDF(KAUSF, serving_network_name)
+
+Lines 134-146: verify_authentication_response()
+  Spec: TS 33.501 Section 6.1.3.2.2 - RES* verification
+
+  Compares RES* from UE with stored HXRES*
+
+
+LINES 148-200: NRF REGISTRATION
+--------------------------------------------------------------------------------
+
+Lines 150-193: lifespan() - Startup/Shutdown
+  Spec: TS 29.510 - Nnrf_NFManagement service
+
+  NF Profile per TS 29.510 Section 6.1.6.2.2:
+    - nfInstanceId: UUID
+    - nfType: "AUSF"
+    - nfServices: nausf-auth service
+    - ausfInfo: SUPI ranges, routing indicators
+
+
+LINES 202-276: UE AUTHENTICATION REQUEST ENDPOINT
+--------------------------------------------------------------------------------
+
+Lines 203-276: ue_authentication_request()
+  Spec: TS 29.509 Section 5.2.2.2.1 - Nausf_UEAuthentication
+  Service: Nausf_UEAuthentication
+  Operation: Authenticate
+  Interface: N12 (AMF-AUSF)
+
+  Procedure per TS 29.509:
+    1. Receive AuthenticationInfo from AMF
+    2. Extract SUPI from SUCI if needed (lines 217-222)
+    3. Request auth vectors from UDM via N13 (lines 224-227)
+    4. Generate local vectors if UDM unavailable (lines 230-234)
+    5. Create authentication context (lines 237-248)
+    6. Return 5G-AKA challenge with _links (lines 251-265)
+
+
+LINES 278-345: 5G-AKA CONFIRMATION ENDPOINT
+--------------------------------------------------------------------------------
+
+Lines 279-345: authentication_confirmation()
+  Spec: TS 29.509 Section 5.2.2.2.2 - 5G-AKA confirmation
+  Operation: PUT confirmation
+
+  Procedure per TS 29.509:
+    1. Look up authentication context (lines 291-293)
+    2. Verify RES* against HXRES* (lines 297-298)
+    3. On success:
+       - Derive KSEAF (line 302)
+       - Return AUTHENTICATION_SUCCESS with KSEAF (lines 309-319)
+    4. On failure:
+       - Return AUTHENTICATION_FAILURE (lines 331-333)
+
+
+LINES 347-383: MANAGEMENT ENDPOINTS
+--------------------------------------------------------------------------------
+
+Lines 359-372: get_authentication_context()
+  Spec: TS 29.509 - Context retrieval
+  Purpose: Query authentication context status
+
+Lines 375-382: delete_authentication_context()
+  Spec: TS 29.509 - Context cleanup
+
+
+LINES 384-411: HEALTH AND METRICS
+--------------------------------------------------------------------------------
+
+Lines 385-394: health_check()
+  Standard health endpoint
+  Returns active context count
+
+Lines 396-408: get_metrics()
+  Monitoring metrics:
+    - Total contexts
+    - Success/failure counts
+    - Success rate
+
+
+================================================================================
+SPECIFICATION CROSS-REFERENCE TABLE
+================================================================================
+
+| Code Section                  | Primary Spec      | Section        |
+|-------------------------------|-------------------|----------------|
+| AuthenticationRequest         | TS 29.509         | 6.1.3.2.2      |
+| AuthenticationVector          | TS 29.509         | 6.1.6.2.2      |
+| AuthenticationInfoResult      | TS 29.509         | 6.1.3.2.3      |
+| ConfirmationDataResponse      | TS 29.509         | 6.1.3.3        |
+| generate_5g_aka_vectors       | TS 33.501         | 6.1.3          |
+| derive_kseaf                  | TS 33.501         | Annex A.6      |
+| verify_authentication_response| TS 33.501         | 6.1.3.2.2      |
+| ue_authentication_request     | TS 29.509         | 5.2.2.2.1      |
+| authentication_confirmation   | TS 29.509         | 5.2.2.2.2      |
+| NRF registration              | TS 29.510         | 5.2.2.2        |
+
+
+================================================================================
+5G-AKA PROCEDURE FLOW (TS 33.501)
+================================================================================
+
+    UE              AMF              AUSF             UDM
+    |                |                |                |
+    |--Registration->|                |                |
+    |                |--Auth Request->|                |
+    |                |                |--Get AV------->|
+    |                |                |<--AV-----------|
+    |                |<--5G-AKA Chall-|                |
+    |<--Auth Request-|                |                |
+    |--Auth Response>|                |                |
+    |                |--5G-AKA Conf-->|                |
+    |                |<--KSEAF--------|                |
+    |<--Registration-|                |                |
+         Accept
+
+================================================================================
+                              END OF DOCUMENT
+================================================================================

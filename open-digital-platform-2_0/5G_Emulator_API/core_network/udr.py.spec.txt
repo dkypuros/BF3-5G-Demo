@@ -1,0 +1,140 @@
+================================================================================
+                    SPECIFICATION MAP: udr.py
+           Unified Data Repository - Spec Reference Bridge
+================================================================================
+
+Source File: 5G_Emulator_API/core_network/udr.py
+Generated:   2026-01-10
+Lines:       51
+Purpose:     Map each code section to governing 3GPP specifications
+Based On:    Simplified UDR for simulation purposes
+
+================================================================================
+PRIMARY GOVERNING SPECIFICATIONS
+================================================================================
+
+3GPP TS 29.504 - Unified Data Repository Services
+  Location: 90_Work-Telco/3GPP/Rel-19/29_series/
+  Scope: Nudr_DataRepository service for subscription data storage
+  Key Sections:
+    - Section 5.2.2: Data operations (Create, Read, Update, Delete)
+    - Section 6.1: API definitions
+
+3GPP TS 29.505 - Subscription Data Storage (via UDR)
+  Location: 90_Work-Telco/3GPP/Rel-19/29_series/
+  Scope: Subscription data schema definitions
+
+
+================================================================================
+LINE-BY-LINE SPECIFICATION MAPPING
+================================================================================
+
+
+LINES 1-8: MODULE HEADER AND IMPORTS
+--------------------------------------------------------------------------------
+
+Lines 1-3: File location markers
+
+Lines 4-7: Imports
+  - FastAPI: HTTP API framework
+  - sqlite3: Local database storage
+
+
+LINES 9-25: DATA MODEL AND DATABASE
+--------------------------------------------------------------------------------
+
+Lines 11-13: class UserData
+  Spec: TS 29.504 - Simplified subscription data model
+
+  Note: Production UDR would implement full TS 29.504 data types:
+    - SubscriptionData
+    - PolicyData
+    - ExposureData
+    - ApplicationData
+
+Lines 15-25: init_db()
+  Purpose: Initialize SQLite database
+
+  Note: Production UDR per TS 29.504 would use:
+    - Distributed database (Cassandra, MongoDB)
+    - Multi-tenant support
+    - Data sharding by SUPI range
+
+
+LINES 27-46: NUDR API ENDPOINTS
+--------------------------------------------------------------------------------
+
+Lines 27-34: register_user()
+  Spec: TS 29.504 Section 5.2.2.2 - Create subscription data
+
+  Simplified equivalent to:
+    PUT /nudr-dr/v1/subscription-data/{ueId}/authentication-data
+
+Lines 36-46: get_user()
+  Spec: TS 29.504 Section 5.2.2.3 - Query subscription data
+
+  Simplified equivalent to:
+    GET /nudr-dr/v1/subscription-data/{ueId}/authentication-data
+
+
+LINES 48-51: STARTUP
+--------------------------------------------------------------------------------
+
+Lines 48-50: Main entry point
+  Initializes database and starts on port 9005
+
+
+================================================================================
+SPECIFICATION CROSS-REFERENCE TABLE
+================================================================================
+
+| Code Section    | Primary Spec | Section        | Notes                    |
+|-----------------|--------------|----------------|--------------------------|
+| UserData        | TS 29.504    | 6.1.6          | Simplified model         |
+| register_user   | TS 29.504    | 5.2.2.2        | CREATE operation         |
+| get_user        | TS 29.504    | 5.2.2.3        | READ operation           |
+
+
+================================================================================
+PRODUCTION UDR WOULD IMPLEMENT (TS 29.504)
+================================================================================
+
+Full Nudr_DataRepository Service:
+  - Subscription Data:
+    - AuthenticationData
+    - AccessAndMobilitySubscriptionData
+    - SessionManagementSubscriptionData
+    - SMSSubscriptionData
+    - SmfSelectionSubscriptionData
+    - TraceData
+    - ProvidingPartySubscriptionData
+
+  - Policy Data:
+    - AmPolicyData
+    - SmPolicyData
+    - SponsorConnectivityData
+
+  - Exposure Data:
+    - AccessAndMobilityData
+    - SessionManagementData
+
+  - Application Data:
+    - PfdData
+    - IptvConfigData
+    - ServiceParameterData
+
+
+================================================================================
+UDR INTERFACE MAPPING
+================================================================================
+
+| Interface | Connected NF | Service              | Purpose                  |
+|-----------|--------------|----------------------|--------------------------|
+| N35       | UDM          | Nudr_DataRepository  | Subscription data        |
+| N36       | PCF          | Nudr_DataRepository  | Policy data              |
+| N37       | NEF          | Nudr_DataRepository  | Application/Exposure data|
+
+
+================================================================================
+                              END OF DOCUMENT
+================================================================================

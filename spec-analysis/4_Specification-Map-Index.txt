@@ -1,0 +1,282 @@
+================================================================================
+SPECIFICATION MAP INDEX
+5G Emulator Lab - Code-to-Specification Bridge System
+================================================================================
+
+Created: 2025
+Purpose: Central index linking all Python source files to their companion
+         specification map files, providing complete traceability from
+         implementation to 3GPP/IETF specifications.
+
+================================================================================
+HOW TO USE THIS SYSTEM
+================================================================================
+
+Each Python file in the 5G Emulator has a companion ".spec.txt" file that:
+
+1. Maps every significant code section to its governing specification
+2. Provides exact section references (e.g., "TS 29.244 Section 8.2.3")
+3. Shows ASN.1/OpenAPI definitions from the specs
+4. Lists compliance status and implementation gaps
+5. Points to your local 3GPP spec files for deeper reading
+
+To use:
+  - Open any .py file
+  - Open the corresponding .py.spec.txt file side-by-side
+  - Cross-reference line numbers to understand specification alignment
+
+================================================================================
+COMPANION SPEC MAP FILES
+================================================================================
+
+CORE NETWORK FUNCTIONS
+----------------------
+
+File: core_network/amf.py
+Spec Map: core_network/amf.py.spec.txt
+Primary Specs: TS 29.518, TS 38.413, TS 23.502, TS 29.510
+Role: Access and Mobility Management Function
+Interfaces: N1 (UE), N2 (gNB), N11 (SMF), N8/N10/N12 (UDM/AUSF/PCF)
+Key Functions:
+  - UE Registration
+  - Authentication coordination
+  - Mobility management (handover)
+  - PDU session lifecycle coordination
+
+File: core_network/smf.py
+Spec Map: core_network/smf.py.spec.txt
+Primary Specs: TS 29.502, TS 29.244, TS 23.502, TS 29.510
+Role: Session Management Function
+Interfaces: N4 (UPF via PFCP), N7 (PCF), N11 (AMF)
+Key Functions:
+  - PDU session establishment/modification/release
+  - UE IP address allocation
+  - QoS flow management
+  - UPF selection and PFCP session control
+
+File: core_network/nrf.py
+Spec Map: core_network/nrf.py.spec.txt
+Primary Specs: TS 29.510
+Role: Network Repository Function
+Interfaces: All NFs (service registration and discovery)
+Key Functions:
+  - NF registration (NFManagement)
+  - NF discovery (NFDiscovery)
+  - OAuth2 access token issuance
+  - NF profile management
+
+File: core_network/upf_enhanced.py
+Spec Map: core_network/upf_enhanced.py.spec.txt
+Primary Specs: TS 29.244, TS 29.281, TS 23.501
+Role: User Plane Function
+Interfaces: N3 (gNB via GTP-U), N4 (SMF via PFCP), N6 (Data Network)
+Key Functions:
+  - PFCP session management
+  - GTP-U tunnel handling
+  - QoS enforcement (token bucket, priority queuing)
+  - IPv4/IPv6 address allocation
+  - Traffic statistics collection
+
+RADIO ACCESS NETWORK
+--------------------
+
+File: ran/gnb.py
+Spec Map: ran/gnb.py.spec.txt
+Primary Specs: TS 38.413, TS 38.300, TS 38.401
+Role: gNodeB (5G Base Station)
+Interfaces: N2 (AMF via NGAP), Uu (UE via NR)
+Key Functions:
+  - NG Setup with AMF
+  - Initial UE Message handling
+  - NAS transport (uplink/downlink)
+  - UE context management
+  - PDU session resource setup
+  - Handover handling
+
+================================================================================
+SPECIFICATION LIBRARY STRUCTURE
+================================================================================
+
+Your 3GPP Release 19 specifications are organized as:
+
+90_Work-Telco/3GPP/Rel-19/
++-- 21_series/     # Requirements
++-- 22_series/     # Service requirements
++-- 23_series/     # Architecture specs
+|   +-- 23003      # Numbering, addressing, identification
+|   +-- 23501      # 5G System architecture (CRITICAL)
+|   +-- 23502      # Procedures (CRITICAL)
+|   +-- 23503      # Policy and charging control
+|
++-- 24_series/     # NAS protocols
+|   +-- 24501      # NAS for 5GS
+|
++-- 29_series/     # SBI and interface specs
+|   +-- 29244      # PFCP (N4 interface) (CRITICAL for UPF)
+|   +-- 29281      # GTP-U (N3 interface)
+|   +-- 29500      # 5G SBI technical realization
+|   +-- 29501      # Principles for 5G APIs
+|   +-- 29502      # SMF services (Nsmf)
+|   +-- 29503      # UDM services (Nudm)
+|   +-- 29504      # UDR services (Nudr)
+|   +-- 29505      # AUSF services (Nausf)
+|   +-- 29507      # PCF services (Npcf)
+|   +-- 29510      # NRF services (Nnrf) (CRITICAL for NRF)
+|   +-- 29518      # AMF services (Namf) (CRITICAL for AMF)
+|   +-- 29571      # Common data types
+|   +-- 29_series/29XXX_OpenAPI/  # OpenAPI YAML files
+|
++-- 32_series/     # Charging and management
+|   +-- 32255      # 5G data connectivity charging
+|   +-- 32425      # Performance measurements
+|
++-- 33_series/     # Security
+|   +-- 33501      # 5G Security architecture
+|
++-- 38_series/     # NR and NG-RAN
+    +-- 38300      # NR overall description
+    +-- 38331      # RRC protocol
+    +-- 38401      # NG-RAN architecture
+    +-- 38412      # N2 transport
+    +-- 38413      # NGAP (CRITICAL for gNB)
+
+================================================================================
+INTERFACE REFERENCE MATRIX
+================================================================================
+
+| Interface | From       | To         | Protocol    | Specs            |
+|-----------|------------|------------|-------------|------------------|
+| N1        | UE         | AMF        | NAS         | TS 24.501        |
+| N2        | gNB        | AMF        | NGAP        | TS 38.413        |
+| N3        | gNB        | UPF        | GTP-U       | TS 29.281        |
+| N4        | SMF        | UPF        | PFCP        | TS 29.244        |
+| N6        | UPF        | DN         | IP          | RFC 791/8200     |
+| N7        | SMF        | PCF        | HTTP/2      | TS 29.507        |
+| N8        | AMF        | UDM        | HTTP/2      | TS 29.503        |
+| N10       | SMF        | UDM        | HTTP/2      | TS 29.503        |
+| N11       | AMF        | SMF        | HTTP/2      | TS 29.502        |
+| N12       | AMF        | AUSF       | HTTP/2      | TS 29.505        |
+| Nnrf      | All NFs    | NRF        | HTTP/2      | TS 29.510        |
+
+================================================================================
+OPENAPI YAML QUICK REFERENCE
+================================================================================
+
+Your YAML files provide machine-readable API contracts:
+
+| File                               | Service        |
+|------------------------------------|----------------|
+| TS29502_Nsmf_PDUSession.yaml       | SMF PDU Sess   |
+| TS29510_Nnrf_NFManagement.yaml     | NRF NF Mgmt    |
+| TS29510_Nnrf_NFDiscovery.yaml      | NRF Discovery  |
+| TS29510_Nnrf_AccessToken.yaml      | NRF OAuth2     |
+| TS29518_Namf_Communication.yaml    | AMF Comm       |
+| TS29518_Namf_EventExposure.yaml    | AMF Events     |
+| TS29503_Nudm_SDM.yaml              | UDM Sub Data   |
+| TS29503_Nudm_UECM.yaml             | UDM UE Context |
+| TS29505_Nausf_UEAuthentication.yaml| AUSF Auth      |
+| TS29507_Npcf_SMPolicyControl.yaml  | PCF SM Policy  |
+
+================================================================================
+CROSS-CUTTING SPECIFICATIONS
+================================================================================
+
+These specs apply across multiple components:
+
+1. TS 29.500 - Technical Realization of Service Based Interface
+   Applies to: ALL Core NFs
+   Covers: HTTP/2, JSON, naming conventions, error handling
+
+2. TS 29.501 - Principles and Guidelines for SBI
+   Applies to: ALL Core NFs
+   Covers: API design principles, versioning
+
+3. TS 29.571 - Common Data Types
+   Applies to: ALL Core NFs
+   Covers: Supi, Gpsi, Snssai, Dnn, PlmnId, etc.
+
+4. TS 33.501 - Security Architecture
+   Applies to: AMF, AUSF, UDM, gNB
+   Covers: Authentication, key derivation, AS/NAS security
+
+5. TS 23.003 - Numbering, Addressing and Identification
+   Applies to: ALL components
+   Covers: IMSI, SUPI, GPSI, TAI, NR-CGI, etc.
+
+================================================================================
+RECOMMENDED READING ORDER
+================================================================================
+
+For understanding the full system:
+
+1. TS 23.501 - 5G System Architecture (start here)
+   Understand: Reference points, NF roles, interfaces
+
+2. TS 23.502 - Procedures
+   Understand: Registration, PDU session, handover flows
+
+3. TS 29.510 - NRF Services
+   Understand: How NFs discover each other
+
+4. TS 29.502 + TS 29.518 - SMF and AMF Services
+   Understand: Core control plane APIs
+
+5. TS 29.244 - PFCP
+   Understand: Control-User plane separation
+
+6. TS 38.413 - NGAP
+   Understand: RAN-Core signaling
+
+================================================================================
+MAPPING COVERAGE SUMMARY
+================================================================================
+
+| Source File          | Spec Map Created | Primary Specs Covered      |
+|----------------------|------------------|----------------------------|
+| core_network/amf.py  | YES              | TS 29.518, TS 38.413       |
+| core_network/smf.py  | YES              | TS 29.502, TS 29.244       |
+| core_network/nrf.py  | YES              | TS 29.510                  |
+| core_network/upf_enhanced.py | YES      | TS 29.244, TS 29.281       |
+| ran/gnb.py           | YES              | TS 38.413                  |
+
+Files that could benefit from spec maps (future):
+  - core_network/udm.py (if exists)
+  - core_network/ausf.py (if exists)
+  - core_network/pcf.py (if exists)
+  - ue/ue_simulator.py (if exists)
+
+================================================================================
+USING THIS WITH OBSERVABILITY
+================================================================================
+
+When running the lab with OpenTelemetry tracing enabled, you can:
+
+1. View a trace span (e.g., "smf_pdu_session_create")
+2. Open the corresponding spec.txt file (smf.py.spec.txt)
+3. Find the endpoint section
+4. See exactly which 3GPP spec section governs that operation
+5. Dive into the actual specification for full details
+
+Example trace attribute mapping:
+  - Span: "smf_pdu_session_create"
+  - Attribute: 3gpp.interface = "N4"
+  - Spec: TS 29.244 Section 7.5.2 (PFCP Session Establishment)
+
+================================================================================
+MAINTENANCE NOTES
+================================================================================
+
+When updating source code:
+1. Update corresponding .spec.txt file
+2. Add new line mappings for new code
+3. Update compliance status if capabilities change
+4. Add new spec references if implementing new features
+
+When 3GPP specs update:
+1. Check section number changes
+2. Update references in .spec.txt files
+3. Note any new mandatory features
+
+================================================================================
+END OF INDEX
+================================================================================

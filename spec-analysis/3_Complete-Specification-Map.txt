@@ -1,0 +1,905 @@
+================================================================================
+           COMPLETE SPECIFICATION MAP: END-TO-END 5G LAB
+    All Networking Specifications That Come Into Play With Full Observability
+================================================================================
+
+                              Generated: 2026-01-06
+
+
+INTRODUCTION
+================================================================================
+
+When you stand up this 5G lab end-to-end with full observability, you touch
+an enormous number of networking specifications - far beyond just 3GPP. This
+document maps every specification that comes into play, organized by layer
+and function.
+
+The lab creates a complete vertical slice through the networking stack:
+  - Physical/Link layer concepts
+  - Network layer (IP)
+  - Transport layer (TCP/UDP)
+  - Application protocols (HTTP, JSON)
+  - Observability protocols (OpenTelemetry, Prometheus)
+  - 3GPP-specific protocols (NAS, NGAP, PFCP, GTP-U)
+  - Security protocols (TLS, OAuth2, JWT)
+  - Time synchronization (PTP)
+  - Machine learning pipelines
+
+Each layer brings its own specifications into play.
+
+
+================================================================================
+LAYER 1: OSI MODEL FOUNDATION - TRANSPORT & NETWORK
+================================================================================
+
+These specifications underpin ALL communication in your lab:
+
+
+TCP/IP STACK (Every HTTP Call)
+--------------------------------------------------------------------------------
+
+RFC 791 - Internet Protocol (IPv4)
+  Where Used: All NF-to-NF communication base layer
+  Your Code: Every HTTP request uses IPv4 addressing
+  Example: nrf_url = "http://127.0.0.1:8000" in smf.py
+
+RFC 8200 - Internet Protocol Version 6 (IPv6)
+  Where Used: UPF dual-stack support, UE IP allocation
+  Your Code: upf_enhanced.py:92-98 - UeIpAddress model with v6 flag
+  3GPP Link: TS 29.244 requires IPv6 support in PFCP
+
+RFC 793 - Transmission Control Protocol (TCP)
+  Where Used: All HTTP connections, reliable delivery
+  Your Code: FastAPI/uvicorn uses TCP for all API endpoints
+  Implicit: Every requests.post() and requests.get() call
+
+RFC 768 - User Datagram Protocol (UDP)
+  Where Used: GTP-U user plane tunneling, PFCP control plane
+  Your Code: upf_enhanced.py models UDP-based GTP-U
+  3GPP Link: TS 29.281 specifies GTP-U over UDP port 2152
+
+RFC 1035 - Domain Name System (DNS)
+  Where Used: Service discovery (production), hostname resolution
+  Your Code: Currently uses IP addresses; production would use DNS
+  3GPP Link: TS 29.510 allows FQDN in NFProfile
+
+RFC 2460/8200 - IPv6 Address Architecture
+  Where Used: UE IPv6 address allocation
+  Your Code: upf_enhanced.py:98 - ipv6_prefix_delegation_bits
+  3GPP Link: TS 29.244 Section 8.2.62 - UE IP Address IE
+
+
+ADDRESSING AND ROUTING
+--------------------------------------------------------------------------------
+
+RFC 1918 - Private Address Allocation
+  Where Used: UE IP address pools, internal NF addressing
+  Your Code: smf.py:173 - ue_ip = f"10.{(pdu_session_id % 254) + 1}.0.1"
+  Reality: 10.x.x.x is private; production uses operator pools
+
+RFC 4632 - CIDR (Classless Inter-Domain Routing)
+  Where Used: IP address pool management, subnet allocation
+  Your Code: upf_enhanced.py uses ipaddress module for CIDR operations
+  3GPP Link: TS 29.244 network instance definitions
+
+RFC 4291 - IPv6 Addressing Architecture
+  Where Used: UE IPv6 assignment, prefix delegation
+  Your Code: upf_enhanced.py:98 - IPv6 prefix delegation bits
+  3GPP Link: TS 29.244 supports /64 prefix delegation
+
+
+================================================================================
+LAYER 2: APPLICATION PROTOCOLS - HTTP/REST/JSON
+================================================================================
+
+Your 5G SBI (Service Based Interface) is built on web standards:
+
+
+HTTP SPECIFICATIONS
+--------------------------------------------------------------------------------
+
+RFC 7230-7235 - HTTP/1.1 Message Syntax and Semantics
+  Where Used: ALL NF-to-NF SBI communication
+  Your Code: FastAPI implements HTTP/1.1 server
+  Examples:
+    - PUT /nnrf-nfm/v1/nf-instances/{id}
+    - POST /nsmf-pdusession/v1/sm-contexts
+    - GET /nnrf-disc/v1/nf-instances
+
+RFC 7231 - HTTP/1.1 Semantics and Content
+  Where Used: HTTP method semantics in all endpoints
+  Your Code:
+    - GET for discovery (nrf.py:532)
+    - PUT for registration (nrf.py:433)
+    - POST for creation (smf.py:144)
+    - PATCH for updates (nrf.py:490)
+    - DELETE for deregistration (nrf.py:518)
+
+RFC 7807 - Problem Details for HTTP APIs
+  Where Used: Error responses in 3GPP APIs
+  Your Code: HTTPException with detail messages
+  3GPP Link: TS 29.500 mandates RFC 7807 for error responses
+  Example: {"title": "Bad Request", "status": 400, "detail": "..."}
+
+RFC 6570 - URI Template
+  Where Used: Parameterized API paths
+  Your Code: /nnrf-nfm/v1/nf-instances/{nfInstanceId}
+  3GPP Link: All SBI specs use URI templates
+
+RFC 3986 - Uniform Resource Identifier (URI)
+  Where Used: API endpoint construction, resource identification
+  Your Code: Every FastAPI route definition
+  3GPP Link: TS 29.500 Section 4.4 defines apiRoot structure
+
+RFC 6585 - Additional HTTP Status Codes
+  Where Used: 429 Too Many Requests (rate limiting)
+  Your Code: Could be used for NF overload
+  3GPP Link: TS 29.500 defines overload handling
+
+
+DATA FORMATS
+--------------------------------------------------------------------------------
+
+RFC 8259 - JavaScript Object Notation (JSON)
+  Where Used: ALL request/response bodies
+  Your Code: Every Pydantic model serializes to JSON
+  Examples:
+    - NFProfile in nrf.py
+    - SmContextCreateData in smf.py
+    - PFCP session data in upf_enhanced.py
+
+ECMA-404 - JSON Data Interchange Format
+  Where Used: Same as RFC 8259 (normative reference)
+  Your Code: json.dumps(), json.loads() calls
+
+RFC 6901 - JSON Pointer
+  Where Used: Referencing specific JSON values
+  3GPP Link: Used in callback URIs and references
+
+RFC 6902 - JSON Patch
+  Where Used: PATCH operations for NF profile updates
+  Your Code: nrf.py:490-515 processes patch operations
+  3GPP Link: TS 29.510 uses JSON Patch for UpdateNFInstance
+
+
+API SPECIFICATION FORMAT
+--------------------------------------------------------------------------------
+
+OpenAPI Specification 3.0 (OAS3)
+  Where Used: All 3GPP YAML API definitions
+  Your Assets: 322+ YAML files in 29_series
+  Example: TS29502_Nsmf_PDUSession.yaml defines SMF API
+  Your Code: Should match these schemas exactly
+
+JSON Schema (draft-07)
+  Where Used: Data type definitions within OpenAPI
+  Your Assets: Embedded in YAML specs
+  Your Code: Pydantic models implement these schemas
+
+
+================================================================================
+LAYER 3: SECURITY PROTOCOLS
+================================================================================
+
+Security permeates every layer of your lab:
+
+
+OAUTH2 / AUTHENTICATION
+--------------------------------------------------------------------------------
+
+RFC 6749 - OAuth 2.0 Authorization Framework
+  Where Used: NF-to-NF authentication via NRF
+  Your Code: nrf.py:395-430 - OAuth2 token endpoint
+  3GPP Link: TS 29.500 Section 13 mandates OAuth2
+  Flow:
+    1. NF requests token from NRF
+    2. NRF issues access_token
+    3. NF includes Bearer token in SBI calls
+
+RFC 6750 - OAuth 2.0 Bearer Token Usage
+  Where Used: Authorization header in NF requests
+  Your Code: nrf.py:375-392 - verify_token() checks Bearer
+  Example: Authorization: Bearer <token>
+
+RFC 7519 - JSON Web Token (JWT)
+  Where Used: Access token format
+  Your Code: nrf.py:250-284 - JWT generation with PyJWT
+  Fields: sub, iss, aud, exp, iat, scope
+  3GPP Link: TS 29.500 allows JWT as token format
+
+RFC 7515 - JSON Web Signature (JWS)
+  Where Used: JWT signing (HS256 in your code)
+  Your Code: nrf.py:34 - JWT_ALGORITHM = "HS256"
+  Production: Would use RS256 with certificates
+
+
+TLS/HTTPS (Production)
+--------------------------------------------------------------------------------
+
+RFC 8446 - TLS 1.3
+  Where Used: Production SBI security (HTTPS)
+  Your Code: Currently HTTP for development
+  3GPP Link: TS 33.501 mandates TLS 1.2+ for SBI
+  Production: All NF-to-NF would use HTTPS
+
+RFC 5246 - TLS 1.2
+  Where Used: Minimum TLS version per 3GPP
+  3GPP Link: TS 33.501 Section 5.9
+
+
+CRYPTOGRAPHIC ALGORITHMS
+--------------------------------------------------------------------------------
+
+RFC 7518 - JSON Web Algorithms (JWA)
+  Where Used: JWT signing algorithms
+  Your Code: HS256 (HMAC-SHA256)
+  Production: RS256, ES256 with PKI
+
+RFC 4868 - HMAC-SHA256 for IPsec
+  Where Used: JWT signing
+  Your Code: JWT_ALGORITHM = "HS256"
+
+
+5G-SPECIFIC SECURITY
+--------------------------------------------------------------------------------
+
+3GPP TS 33.501 - Security Architecture
+  Where Used: 5G-AKA authentication, key derivation
+  Your Code: ausf.py implements authentication
+  Concepts: SUPI, SUCI, AUSF key storage
+
+3GPP TS 33.220 - GBA (Generic Bootstrapping Architecture)
+  Where Used: If implementing GBA-based auth
+  Your Assets: TS29309_Nbsp_GBA.yaml
+
+IETF RFC 3748 - EAP (Extensible Authentication Protocol)
+  Where Used: 5G-AKA uses EAP framework
+  3GPP Link: TS 33.501 Section 6.1.3
+
+
+================================================================================
+LAYER 4: OBSERVABILITY STACK
+================================================================================
+
+Full observability brings in its own protocol ecosystem:
+
+
+OPENTELEMETRY
+--------------------------------------------------------------------------------
+
+OpenTelemetry Specification (CNCF)
+  Where Used: Distributed tracing across all NFs
+  Your Code: Every NF imports opentelemetry
+  Components:
+    - TracerProvider setup
+    - Span creation with attributes
+    - Context propagation
+
+W3C Trace Context Specification
+  Where Used: Trace ID propagation across NF calls
+  Your Code: OpenTelemetry auto-propagates trace headers
+  Headers: traceparent, tracestate
+  Example: traceparent: 00-0af7651916cd43dd8448eb211c80319c-...
+
+W3C Baggage Specification
+  Where Used: Additional context propagation
+  Headers: baggage: key=value
+
+OpenTelemetry Protocol (OTLP)
+  Where Used: Exporting traces/metrics to collector
+  Your Setup: Would export to Jaeger/Grafana
+  Format: gRPC or HTTP/protobuf
+
+OpenTelemetry Semantic Conventions
+  Where Used: Standard attribute names
+  Your Code: Custom 3GPP attributes like:
+    - "3gpp.interface": "N11"
+    - "3gpp.service": "Nsmf_PDUSession"
+    - "ue.supi": supi
+
+
+PROMETHEUS / METRICS
+--------------------------------------------------------------------------------
+
+Prometheus Exposition Format
+  Where Used: Metrics endpoint for scraping
+  Your Code: PrometheusMetricReader in amf.py
+  Your Config: prometheus.yml defines scrape targets
+  Endpoint: /metrics returns prometheus format
+
+PromQL (Prometheus Query Language)
+  Where Used: Querying metrics from Prometheus
+  Your Code: amf-network-latency-metrics-promql-*.py
+  Example: rate(http_request_duration_seconds_sum[5m])
+
+Prometheus Remote Write Protocol
+  Where Used: Federation, long-term storage
+  Your Config: prometheus.yml has remote_write config
+
+OpenMetrics (CNCF)
+  Where Used: Evolution of Prometheus format
+  Standard: Prometheus exposition format is subset
+
+
+LOGGING
+--------------------------------------------------------------------------------
+
+Python logging (PEP 282)
+  Where Used: All Python NF implementations
+  Your Code: logging.basicConfig() in every NF
+  Format: %(asctime)s - %(name)s - %(levelname)s - %(message)s
+
+Syslog (RFC 5424) - Conceptual
+  Where Used: Production log aggregation
+  Your Code: Could add syslog handler for centralized logging
+
+
+================================================================================
+LAYER 5: 3GPP CONTROL PLANE PROTOCOLS
+================================================================================
+
+The telecom-specific protocols that define 5G behavior:
+
+
+SERVICE-BASED INTERFACE (SBI)
+--------------------------------------------------------------------------------
+
+3GPP TS 29.500 - 5GC SBI: General Aspects
+  Where Used: Foundation for all NF-to-NF communication
+  Your Code: All core_network/*.py files
+  Defines:
+    - HTTP/2 as transport (your code uses HTTP/1.1)
+    - API versioning (/v1/, /v2/)
+    - Error handling (RFC 7807)
+    - OAuth2 security
+    - Service discovery via NRF
+
+3GPP TS 29.501 - 5GC SBI: Principles and Guidelines
+  Where Used: API design patterns
+  Your Code: Endpoint naming follows conventions
+  Example: /n{nf-type}-{service}/v{version}/...
+
+3GPP TS 29.502 - SMF Services (Nsmf)
+  Where Used: smf.py session management
+  Your Code: /nsmf-pdusession/v1/sm-contexts
+  Your Asset: TS29502_Nsmf_PDUSession.yaml
+  Operations: CreateSMContext, UpdateSMContext, ReleaseSMContext
+
+3GPP TS 29.503 - UDM Services (Nudm)
+  Where Used: udm.py data management
+  Your Assets: 10 YAML files (Nudm_SDM, Nudm_UEAU, etc.)
+  Operations: Subscriber data management, authentication
+
+3GPP TS 29.507 - PCF Services (Npcf_AMPolicyControl)
+  Where Used: pcf.py access/mobility policy
+  Your Asset: TS29507_Npcf_AMPolicyControl.yaml
+
+3GPP TS 29.509 - AUSF Services (Nausf)
+  Where Used: ausf.py authentication
+  Your Assets: TS29509_Nausf_UEAuthentication.yaml
+  Operations: 5G-AKA authentication
+
+3GPP TS 29.510 - NRF Services (Nnrf)
+  Where Used: nrf.py discovery and registration
+  Your Assets: 4 YAML files
+  Operations: RegisterNF, DiscoverNF, Subscribe
+
+3GPP TS 29.512 - PCF Services (Npcf_SMPolicyControl)
+  Where Used: pcf.py session policy
+  Your Asset: TS29512_Npcf_SMPolicyControl.yaml
+
+3GPP TS 29.518 - AMF Services (Namf)
+  Where Used: amf.py, amf_nas.py
+  Your Assets: 7 YAML files
+  Operations: Communication, EventExposure, Location
+
+
+N4 INTERFACE (SMF-UPF)
+--------------------------------------------------------------------------------
+
+3GPP TS 29.244 - PFCP (Packet Forwarding Control Protocol)
+  Where Used: SMF to UPF control plane
+  Your Code: smf.py:74-117, upf_enhanced.py
+  Message Types:
+    - Session Establishment Request/Response
+    - Session Modification Request/Response
+    - Session Deletion Request/Response
+  Data Structures:
+    - PDR (Packet Detection Rule)
+    - FAR (Forwarding Action Rule)
+    - QER (QoS Enforcement Rule)
+    - URR (Usage Reporting Rule)
+  Your Code Models:
+    - upf_enhanced.py:33-73 - MessageType, Cause enums
+    - upf_enhanced.py:75-99 - OuterHeaderCreation, FTeid, UeIpAddress
+
+IETF RFC 8805 - PFCP
+  Where Used: IETF publication of 3GPP PFCP
+  Same as: TS 29.244 (aligned specification)
+
+
+USER PLANE PROTOCOL
+--------------------------------------------------------------------------------
+
+3GPP TS 29.281 - GTP-U (GPRS Tunneling Protocol - User Plane)
+  Where Used: N3 (gNB-UPF), N9 (UPF-UPF) user data
+  Your Code: upf_enhanced.py models GTP-U encapsulation
+  Header Fields:
+    - Version (1)
+    - Protocol Type (1)
+    - TEID (Tunnel Endpoint Identifier)
+    - Sequence Number
+  Your Code: Lines 75-82 model outer header creation
+
+IETF RFC 791 - IP Encapsulation
+  Where Used: GTP-U carries IP packets in tunnel
+  Your Code: upf_enhanced.py packet processing
+
+
+NAS PROTOCOL (UE-AMF)
+--------------------------------------------------------------------------------
+
+3GPP TS 24.501 - 5G NAS Protocol
+  Where Used: amf_nas.py registration, authentication
+  Your Code: NAS message handling
+  Message Types:
+    - Registration Request/Accept/Reject
+    - Authentication Request/Response
+    - Security Mode Command/Complete
+    - PDU Session Establishment Request/Accept
+  Key Concepts:
+    - 5G-GUTI (Globally Unique Temporary ID)
+    - SUPI/SUCI (Subscriber identifiers)
+    - Security context
+
+3GPP TS 24.007 - Mobile Radio Interface Layer 3
+  Where Used: NAS message structure
+  Concepts: Protocol discriminator, message type
+
+
+NGAP PROTOCOL (gNB-AMF)
+--------------------------------------------------------------------------------
+
+3GPP TS 38.413 - NGAP (NG Application Protocol)
+  Where Used: N2 interface between gNB and AMF
+  Your Code: gnb.py, amf.py handover handling
+  Message Types:
+    - NG Setup Request/Response
+    - Initial UE Message
+    - PDU Session Resource Setup Request/Response
+    - Handover Required/Request/Acknowledge
+  Your Code: amf.py models N2 SM Information exchange
+
+
+F1AP PROTOCOL (CU-DU)
+--------------------------------------------------------------------------------
+
+3GPP TS 38.463 - F1AP (F1 Application Protocol)
+  Where Used: F1 interface between CU and DU
+  Your Code: ran/cu.py communicates with ran/du.py
+  Message Types:
+    - F1 Setup Request/Response
+    - UE Context Setup Request/Response
+    - UL/DL RRC Message Transfer
+
+
+XnAP PROTOCOL (gNB-gNB)
+--------------------------------------------------------------------------------
+
+3GPP TS 38.423 - XnAP (Xn Application Protocol)
+  Where Used: Inter-gNB handover
+  Your Code: Could be used for handover scenarios
+  Message Types:
+    - Xn Setup Request/Response
+    - Handover Request/Acknowledge
+
+
+================================================================================
+LAYER 6: 3GPP RAN PROTOCOLS (L1/L2/L3)
+================================================================================
+
+The radio access network protocol stack:
+
+
+RRC (Radio Resource Control) - Layer 3
+--------------------------------------------------------------------------------
+
+3GPP TS 38.331 - RRC Protocol
+  Where Used: ran/cu/rrc.py
+  Your Code: RRC state machine, connection setup
+  States: RRC_IDLE, RRC_INACTIVE, RRC_CONNECTED
+  Messages:
+    - RRC Setup Request/Complete
+    - RRC Reconfiguration
+    - Measurement Report
+  Your Asset: 38331-j00.docx
+
+
+SDAP (Service Data Adaptation Protocol)
+--------------------------------------------------------------------------------
+
+3GPP TS 37.324 - SDAP Protocol
+  Where Used: ran/cu/sdap.py
+  Function: QoS flow to DRB mapping
+  Your Code: Maps 5QI to radio bearers
+
+
+PDCP (Packet Data Convergence Protocol) - Layer 2
+--------------------------------------------------------------------------------
+
+3GPP TS 38.323 - PDCP Protocol
+  Where Used: ran/cu/pdcp.py
+  Functions:
+    - Header compression (ROHC)
+    - Ciphering
+    - Integrity protection
+    - Sequence numbering
+    - Duplicate detection
+  Your Asset: 38323-j00.docx
+
+IETF RFC 3095 - RObust Header Compression (ROHC)
+  Where Used: PDCP header compression
+  Function: Compress IP/UDP headers for radio efficiency
+
+
+RLC (Radio Link Control) - Layer 2
+--------------------------------------------------------------------------------
+
+3GPP TS 38.322 - RLC Protocol
+  Where Used: ran/du/rlc.py
+  Modes:
+    - TM (Transparent Mode)
+    - UM (Unacknowledged Mode)
+    - AM (Acknowledged Mode)
+  Functions: Segmentation, ARQ, reordering
+  Your Asset: 38322-j00.docx
+
+
+MAC (Medium Access Control) - Layer 2
+--------------------------------------------------------------------------------
+
+3GPP TS 38.321 - MAC Protocol
+  Where Used: ran/du/mac.py
+  Functions:
+    - Scheduling (uplink/downlink)
+    - HARQ (Hybrid ARQ)
+    - Multiplexing
+    - Priority handling
+    - Random access procedure
+  Your Asset: 38321-j00.docx
+
+
+PHY (Physical Layer) - Layer 1
+--------------------------------------------------------------------------------
+
+3GPP TS 38.201-38.215 - NR Physical Layer
+  Where Used: ran/du/phy.py (simplified model)
+  Concepts:
+    - OFDM modulation
+    - Resource blocks
+    - Slots and frames
+    - MIMO
+    - Beamforming
+  Your Assets: 38201-*.docx through 38215-*.docx
+
+
+================================================================================
+LAYER 7: TIME SYNCHRONIZATION
+================================================================================
+
+Precise timing is critical for 5G:
+
+
+IEEE 1588 - Precision Time Protocol (PTP)
+  Where Used: ptp/ptp.py
+  Function: Sub-microsecond synchronization
+  3GPP Link: TS 38.104 timing requirements
+  Components:
+    - Grandmaster clock
+    - Boundary clocks
+    - PTP messages (Sync, Follow_Up, Delay_Req)
+
+ITU-T G.8275.1 - Telecom PTP Profile
+  Where Used: Telecom-specific PTP requirements
+  Function: Fronthaul/backhaul synchronization
+
+ITU-T G.8262 - Synchronous Ethernet (SyncE)
+  Where Used: Physical layer frequency sync
+  Complement: Works with PTP for full sync
+
+RFC 5905 - NTP (Network Time Protocol)
+  Where Used: General time synchronization
+  Your Code: Python datetime uses system time
+  Note: NTP not precise enough for 5G radio
+
+
+================================================================================
+LAYER 8: QOS AND TRAFFIC MANAGEMENT
+================================================================================
+
+Quality of Service specifications:
+
+
+3GPP QOS FRAMEWORK
+--------------------------------------------------------------------------------
+
+3GPP TS 23.501 - System Architecture (QoS Sections)
+  Where Used: QoS flow definition, 5QI values
+  Your Code: pcf.py, smf.py QoS handling
+  Concepts:
+    - 5QI (5G QoS Identifier)
+    - QoS Flow
+    - GBR/Non-GBR
+    - Reflective QoS
+
+3GPP TS 23.503 - Policy and Charging Control
+  Where Used: pcf.py policy decisions
+  Concepts:
+    - PCC rules
+    - Session rules
+    - QoS decisions
+
+3GPP TS 29.512 - SM Policy Control
+  Where Used: SMF-PCF interface
+  Your Asset: TS29512_Npcf_SMPolicyControl.yaml
+
+
+IETF DIFFSERV
+--------------------------------------------------------------------------------
+
+RFC 2474 - DiffServ Field Definition
+  Where Used: IP DSCP marking
+  Function: Per-hop behavior classification
+
+RFC 2475 - DiffServ Architecture
+  Where Used: QoS enforcement in transport
+  Your Code: upf_enhanced.py could mark DSCP
+
+RFC 3246 - Expedited Forwarding PHB
+  Where Used: Low-latency traffic class
+
+RFC 2597 - Assured Forwarding PHB
+  Where Used: Multiple drop precedence levels
+
+
+TOKEN BUCKET / TRAFFIC SHAPING
+--------------------------------------------------------------------------------
+
+RFC 2698 - Two Rate Three Color Marker
+  Where Used: Traffic policing algorithms
+  Your Code: upf_enhanced.py mentions token bucket for QoS
+
+RFC 2697 - Single Rate Three Color Marker
+  Where Used: Simple rate limiting
+
+
+================================================================================
+LAYER 9: DATA SERIALIZATION AND ENCODING
+================================================================================
+
+How data is encoded on the wire:
+
+
+ASN.1 (Abstract Syntax Notation One)
+--------------------------------------------------------------------------------
+
+ITU-T X.680-X.683 - ASN.1 Notation
+  Where Used: NAS, NGAP, F1AP, XnAP message encoding
+  3GPP Link: Control plane messages use ASN.1
+  Your Assets: 46_series contains ASN.1 definitions
+
+ITU-T X.691 - PER (Packed Encoding Rules)
+  Where Used: NGAP, F1AP encoding (APER)
+  Function: Efficient binary encoding
+
+ITU-T X.696 - OER (Octet Encoding Rules)
+  Where Used: Some 3GPP messages
+
+
+PROTOBUF (Alternative)
+--------------------------------------------------------------------------------
+
+Google Protocol Buffers
+  Where Used: OpenTelemetry OTLP export
+  Your Code: OTLP gRPC uses protobuf
+
+
+================================================================================
+LAYER 10: WEB FRAMEWORK SPECIFICATIONS
+================================================================================
+
+The web stack under your FastAPI applications:
+
+
+ASGI / UVICORN
+--------------------------------------------------------------------------------
+
+ASGI Specification
+  Where Used: Async web server interface
+  Your Code: uvicorn.run(app, ...) in all NFs
+
+PEP 3333 - WSGI (predecessor)
+  Where Used: Conceptual foundation
+
+
+PYTHON WEB STANDARDS
+--------------------------------------------------------------------------------
+
+PEP 3156 - asyncio
+  Where Used: Async HTTP handling
+  Your Code: async def endpoints
+
+PEP 484 - Type Hints
+  Where Used: Pydantic model definitions
+  Your Code: Field(..., description="...")
+
+PEP 557 - Data Classes
+  Where Used: Pydantic BaseModel foundation
+
+
+================================================================================
+LAYER 11: MACHINE LEARNING PIPELINE
+================================================================================
+
+Your Granite-TS integration brings ML specifications:
+
+
+ML FRAMEWORKS
+--------------------------------------------------------------------------------
+
+PyTorch Tensor Specification
+  Where Used: Time series prediction
+  Your Code: Granite-TS/ directory
+
+Hugging Face Transformers API
+  Where Used: TinyTimeMixer model
+  Your Code: from transformers import Trainer
+
+ONNX (Open Neural Network Exchange)
+  Where Used: Model portability (potential)
+  Standard: Model interchange format
+
+
+TIME SERIES DATA
+--------------------------------------------------------------------------------
+
+Pandas DataFrame Specification
+  Where Used: Telemetry data processing
+  Your Code: import pandas as pd
+
+NumPy Array Interface
+  Where Used: Numerical computations
+  Your Code: import numpy as np
+
+
+================================================================================
+LAYER 12: NETWORK SLICING
+================================================================================
+
+Network slicing brings additional specifications:
+
+
+3GPP NETWORK SLICING
+--------------------------------------------------------------------------------
+
+3GPP TS 23.501 - Network Slicing Architecture
+  Where Used: S-NSSAI handling in all NFs
+  Your Code: nrf.py Snssai model (SST + SD)
+  Concepts:
+    - SST (Slice/Service Type)
+    - SD (Slice Differentiator)
+    - NSI (Network Slice Instance)
+
+3GPP TS 28.530 - Network Slice Management
+  Where Used: Slice lifecycle management
+  Your Assets: TS29435_NSCE_*.yaml (14 files)
+
+
+================================================================================
+SUMMARY: SPECIFICATION COUNT BY CATEGORY
+================================================================================
+
+Category                          Specifications     Your Direct Use
+--------------------------------------------------------------------------------
+TCP/IP Foundation                 ~15 RFCs           All NF communication
+HTTP/REST/JSON                    ~12 RFCs           Every API call
+Security (OAuth2/JWT/TLS)         ~10 RFCs           Authentication
+OpenTelemetry/Prometheus          ~6 specs           Full observability
+3GPP Core Network (29 series)     ~25 TS docs        Core NF code
+3GPP NAS/NGAP/F1AP               ~8 TS docs         Control plane
+3GPP RAN Protocols (38 series)    ~15 TS docs        RAN emulation
+3GPP User Plane (GTP-U/PFCP)      ~3 TS docs         UPF, N4 interface
+Time Synchronization              ~4 specs           PTP support
+QoS/DiffServ                      ~8 RFCs/TS         Traffic management
+ASN.1/Encoding                    ~5 ITU-T specs     Message encoding
+Web Framework                     ~5 PEPs            FastAPI/Python
+Machine Learning                  ~4 specs           Granite-TS
+Network Slicing                   ~3 TS docs         S-NSSAI handling
+--------------------------------------------------------------------------------
+TOTAL                             ~120+ specifications
+
+
+================================================================================
+VISUAL: SPECIFICATION LAYERS IN YOUR LAB
+================================================================================
+
+                        ┌─────────────────────────────────────┐
+                        │     OBSERVABILITY LAYER             │
+                        │  OpenTelemetry, Prometheus, W3C     │
+                        │  Trace Context, OTLP                │
+                        └─────────────────────────────────────┘
+                                        │
+         ┌──────────────────────────────┼──────────────────────────────┐
+         │                              │                              │
+         ▼                              ▼                              ▼
+┌─────────────────┐          ┌─────────────────┐          ┌─────────────────┐
+│   FRONTEND      │          │   5G CORE NFs   │          │   RAN           │
+│   Next.js       │          │   FastAPI       │          │   gNB/CU/DU     │
+│   React         │◄────────►│   Python        │◄────────►│   Python        │
+│   TypeScript    │   HTTP   │   Pydantic      │   NGAP   │   Protocol      │
+│   Tailwind      │   JSON   │                 │   F1AP   │   Stack         │
+└─────────────────┘          └─────────────────┘          └─────────────────┘
+                                        │
+         ┌──────────────────────────────┼──────────────────────────────┐
+         │                              │                              │
+         ▼                              ▼                              ▼
+┌─────────────────┐          ┌─────────────────┐          ┌─────────────────┐
+│   SBI LAYER     │          │   USER PLANE    │          │   SECURITY      │
+│   TS 29.5xx     │          │   GTP-U (29.281)│          │   OAuth2 (6749) │
+│   HTTP/2        │          │   PFCP (29.244) │          │   JWT (7519)    │
+│   JSON          │          │   UDP           │          │   TLS (8446)    │
+│   OpenAPI       │          │                 │          │   5G-AKA        │
+└─────────────────┘          └─────────────────┘          └─────────────────┘
+                                        │
+                        ┌───────────────┴───────────────┐
+                        │                               │
+                        ▼                               ▼
+               ┌─────────────────┐            ┌─────────────────┐
+               │   TRANSPORT     │            │   TIME SYNC     │
+               │   TCP (793)     │            │   PTP (1588)    │
+               │   UDP (768)     │            │   NTP (5905)    │
+               └─────────────────┘            └─────────────────┘
+                        │
+                        ▼
+               ┌─────────────────┐
+               │   NETWORK       │
+               │   IPv4 (791)    │
+               │   IPv6 (8200)   │
+               │   CIDR (4632)   │
+               └─────────────────┘
+
+
+================================================================================
+CONCLUSION
+================================================================================
+
+Standing up your 5G lab end-to-end with full observability brings together
+specifications from:
+
+  - IETF (Internet Engineering Task Force) - Core protocols
+  - 3GPP (3rd Generation Partnership Project) - Telecom
+  - IEEE (Institute of Electrical and Electronics Engineers) - Timing
+  - ITU-T (International Telecommunication Union) - Encoding
+  - W3C (World Wide Web Consortium) - Tracing
+  - CNCF (Cloud Native Computing Foundation) - Observability
+  - OASIS - Security standards
+  - Python PEPs - Language features
+
+This represents the convergence of:
+  - Traditional telecommunications
+  - Web/cloud technologies
+  - Observability/monitoring
+  - Security frameworks
+  - Machine learning
+
+Your lab is a microcosm of modern telecommunications - built on decades of
+standardization work from dozens of organizations, implemented in code you
+control and can trace through.
+
+That's not just a lab. That's a comprehensive education in how the modern
+connected world actually works.
+
+
+================================================================================
+                              END OF DOCUMENT
+================================================================================

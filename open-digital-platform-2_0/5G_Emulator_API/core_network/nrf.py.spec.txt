@@ -1,0 +1,474 @@
+================================================================================
+                    SPECIFICATION MAP: nrf.py
+            Network Repository Function - Spec Reference Bridge
+================================================================================
+
+Source File: 5G_Emulator_API/core_network/nrf.py
+Generated:   2026-01-06
+Lines:       706
+Purpose:     Map each code section to governing 3GPP and IETF specifications
+
+
+================================================================================
+PRIMARY GOVERNING SPECIFICATIONS
+================================================================================
+
+3GPP TS 29.510 - NRF Services (Nnrf)
+  Location: 90_Work-Telco/3GPP/Rel-19/29_series/29510-j40.docx
+  YAML APIs:
+    - TS29510_Nnrf_NFManagement.yaml (NF Registration/Deregistration)
+    - TS29510_Nnrf_NFDiscovery.yaml (NF Discovery)
+    - TS29510_Nnrf_AccessToken.yaml (OAuth2 Token)
+    - TS29510_Nnrf_Bootstrapping.yaml (Initial NRF Discovery)
+  Scope: Defines NRF as the service registry for 5G Core
+
+3GPP TS 29.500 - 5GC SBI General Aspects
+  Location: 90_Work-Telco/3GPP/Rel-19/29_series/29500-j40.docx
+  Scope: OAuth2 security framework, HTTP/2, API versioning
+
+3GPP TS 29.571 - Common Data Types
+  Location: 90_Work-Telco/3GPP/Rel-19/29_series/29571-j40.docx
+  YAML: TS29571_CommonData.yaml
+  Scope: Shared data types (PlmnId, Snssai, etc.)
+
+
+================================================================================
+LINE-BY-LINE SPECIFICATION MAPPING
+================================================================================
+
+
+LINES 1-36: IMPORTS AND SECURITY SETUP
+--------------------------------------------------------------------------------
+
+Lines 5-7: FastAPI Security Imports
+  from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials, OAuth2PasswordBearer
+
+  Spec: RFC 6749 - OAuth 2.0 Authorization Framework
+        RFC 6750 - OAuth 2.0 Bearer Token Usage
+  3GPP: TS 29.500 Section 13 - Security
+
+Lines 16-17: JWT Import
+  import jwt
+
+  Spec: RFC 7519 - JSON Web Token (JWT)
+        RFC 7515 - JSON Web Signature (JWS)
+  3GPP: TS 29.510 Section 5.4.2.2 - Access Token format
+
+Lines 29-35: OAuth2 Configuration
+  oauth2_scheme = OAuth2PasswordBearer(tokenUrl="oauth2/token")
+  JWT_SECRET_KEY = secrets.token_urlsafe(32)
+  JWT_ALGORITHM = "HS256"
+  JWT_ACCESS_TOKEN_EXPIRE_MINUTES = 60
+
+  Spec: RFC 6749 Section 4.4 - Client Credentials Grant
+        RFC 7518 - JSON Web Algorithms (JWA) - HS256
+  3GPP: TS 29.510 Section 5.4.2.2.2 - Access Token Claims
+  Gap:  Production should use RS256 with PKI per TS 33.501
+
+
+LINES 38-67: NF TYPE AND STATUS ENUMS
+--------------------------------------------------------------------------------
+
+Lines 38-57: class NFType(str, Enum)
+  Spec: 3GPP TS 29.510 - Section 6.1.6.3.3 NFType
+  YAML: TS29510_Nnrf_NFManagement.yaml - NFType enum
+
+  Values mapped to spec:
+    NRF, UDM, AMF, SMF, AUSF, NEF, PCF, SMSF, NSSF, UDR, LMF, GMLC,
+    UPF, N3IWF, AF, UDSF, BSF, CHF
+
+  Additional Rel-19 types NOT in your code:
+    NWDAF, TSCTSF, EASDF, DCCF, MB-SMF, NSACF, PKMF, MNPF, etc.
+  Ref: Compare against TS29510_Nnrf_NFManagement.yaml NFType enum
+
+Lines 58-62: class NFStatus(str, Enum)
+  Spec: 3GPP TS 29.510 - Section 6.1.6.3.4 NFStatus
+  Values: REGISTERED, UNDISCOVERABLE, SUSPENDED
+
+
+LINES 68-106: CORE DATA MODELS (3GPP DATA TYPES)
+--------------------------------------------------------------------------------
+
+Lines 68-70: class PlmnId(BaseModel)
+  Spec: 3GPP TS 29.571 - Section 5.4.4.1 PlmnId
+        TS 23.003 - Section 2.2 PLMN Identity
+  YAML: TS29571_CommonData.yaml - PlmnId schema
+
+  mcc: str = Field(..., regex="^[0-9]{3}$")
+    Spec: Mobile Country Code, 3 digits
+    Examples: "310" (USA), "234" (UK)
+
+  mnc: str = Field(..., regex="^[0-9]{2,3}$")
+    Spec: Mobile Network Code, 2-3 digits
+    Examples: "260" (T-Mobile US)
+
+Lines 72-74: class Snssai(BaseModel)
+  Spec: 3GPP TS 29.571 - Section 5.4.4.2 Snssai
+        TS 23.501 - Section 5.15.2 S-NSSAI
+  YAML: TS29571_CommonData.yaml - Snssai schema
+
+  sst: int = Field(..., ge=0, le=255)
+    Spec: Slice/Service Type, 8 bits (0-255)
+    Values: 1=eMBB, 2=URLLC, 3=MIoT, 4=V2X
+
+  sd: Optional[str] = Field(None, regex="^[A-Fa-f0-9]{6}$")
+    Spec: Slice Differentiator, 24 bits as hex
+    Example: "010203"
+
+Lines 76-81: class IpEndPoint(BaseModel)
+  Spec: 3GPP TS 29.510 - Section 6.1.6.2.8 IpEndPoint
+  YAML: TS29510_Nnrf_NFManagement.yaml - IpEndPoint schema
+
+  Fields: ipv4Address, ipv6Address, transport, port
+  Use: NF service endpoint addressing
+
+Lines 83-86: class NFServiceVersion(BaseModel)
+  Spec: 3GPP TS 29.510 - Section 6.1.6.2.6 NFServiceVersion
+  Fields: apiVersionInUri, apiFullVersion, expiry
+
+Lines 87-106: class NFService(BaseModel)
+  Spec: 3GPP TS 29.510 - Section 6.1.6.2.5 NFService
+  YAML: TS29510_Nnrf_NFManagement.yaml - NFService schema
+
+  Key Fields:
+    - serviceInstanceId: Unique service identifier
+    - serviceName: e.g., "nsmf-pdusession", "nnrf-disc"
+    - versions: Supported API versions
+    - scheme: "http" or "https"
+    - nfServiceStatus: Service availability
+    - ipEndPoints: Where to reach the service
+    - allowedPlmns, allowedNfTypes: Access control
+
+
+LINES 107-206: NF-SPECIFIC INFO STRUCTURES
+--------------------------------------------------------------------------------
+
+Lines 107-111: class AusfInfo(BaseModel)
+  Spec: 3GPP TS 29.510 - Section 6.1.6.2.12 AusfInfo
+  Use: AUSF-specific registration data (SUPI ranges, routing indicators)
+
+Lines 112-118: class UdmInfo(BaseModel)
+  Spec: 3GPP TS 29.510 - Section 6.1.6.2.13 UdmInfo
+  Use: UDM-specific data (SUPI/GPSI ranges)
+
+Lines 119-128: class AmfInfo(BaseModel)
+  Spec: 3GPP TS 29.510 - Section 6.1.6.2.10 AmfInfo
+  Fields: amfSetId, amfRegionId, guamiList, taiList
+  3GPP: TS 23.501 Section 5.10.2 - AMF identification
+
+Lines 129-137: class SmfInfo(BaseModel)
+  Spec: 3GPP TS 29.510 - Section 6.1.6.2.14 SmfInfo
+  Fields: sNssaiSmfInfoList, taiList, pgwFqdn
+  Use: SMF's supported slices and serving areas
+
+Lines 138-144: class UpfInfo(BaseModel)
+  Spec: 3GPP TS 29.510 - Section 6.1.6.2.15 UpfInfo
+  Fields: sNssaiUpfInfoList, interfaceUpfInfoList
+  Use: UPF capabilities for selection
+
+Lines 145-207: class NFProfile(BaseModel)
+  Spec: 3GPP TS 29.510 - Section 6.1.6.2.2 NFProfile
+  YAML: TS29510_Nnrf_NFManagement.yaml - NFProfile schema
+
+  This is the CORE data model - 60+ fields covering:
+    - Identity: nfInstanceId, nfInstanceName, nfType
+    - Status: nfStatus, heartBeatTimer, recoveryTime
+    - Network: plmnList, sNssais, fqdn, ipv4/ipv6Addresses
+    - Access Control: allowedPlmns, allowedNfTypes, allowedNssais
+    - Capacity: priority, capacity, load
+    - NF-specific: *Info fields for each NF type
+    - Services: nfServices list
+
+
+LINES 208-238: DISCOVERY AND SUBSCRIPTION MODELS
+--------------------------------------------------------------------------------
+
+Lines 208-214: class SearchResult(BaseModel)
+  Spec: 3GPP TS 29.510 - Section 6.2.6.2.2 SearchResult
+  YAML: TS29510_Nnrf_NFDiscovery.yaml - SearchResult schema
+
+  Fields:
+    - validityPeriod: How long results are cacheable
+    - nfInstances: List of matching NFProfiles
+    - searchId: For pagination
+    - nrfSupportedFeatures: Feature negotiation
+
+Lines 216-227: class SubscriptionData(BaseModel)
+  Spec: 3GPP TS 29.510 - Section 6.1.6.2.19 SubscriptionData
+  Use: NF status change notifications
+
+Lines 229-237: OAuth2 Token Models
+  Spec: RFC 6749 Section 5.1 - Access Token Response
+        3GPP TS 29.510 Section 5.4.2.2
+
+
+LINES 244-357: NRF CLASS - CORE LOGIC
+--------------------------------------------------------------------------------
+
+Lines 244-248: class NRF.__init__
+  Spec: NRF instance identity
+  Note: nf_instance_id should be UUID per TS 29.510
+
+Lines 250-271: generate_access_token()
+  Spec: 3GPP TS 29.510 - Section 5.4.2.2 Access Token Request
+        RFC 7519 - JWT Claims
+
+  JWT Payload (lines 252-259):
+    - sub: Client ID (NF requesting token)
+    - iss: NRF instance ID
+    - aud: Target audience ("nrf")
+    - exp: Expiration time
+    - iat: Issued at time
+    - scope: OAuth2 scopes (e.g., "nnrf-nfm nnrf-disc")
+
+  3GPP Claims (TS 29.510 Section 5.4.2.2.2):
+    - Your impl has standard JWT claims
+    - Full spec adds: nfType, targetNfType, targetPlmn, etc.
+
+Lines 273-284: verify_access_token()
+  Spec: RFC 7519 Section 7.2 - Validating a JWT
+        Check signature, expiration, claims
+
+Lines 286-356: find_nf_instances() - Discovery Algorithm
+  Spec: 3GPP TS 29.510 - Section 5.2.3.2 NFDiscover
+
+  Filter Logic (matches spec query parameters):
+    Line 299: Filter by target_nf_type
+      Spec: Query param "target-nf-type"
+
+    Lines 303-305: Filter by requester_nf_type
+      Spec: Query param "requester-nf-type" + allowedNfTypes check
+
+    Lines 307-315: Filter by service_names
+      Spec: Query param "service-names"
+
+    Lines 317-329: Filter by snssais
+      Spec: Query param "snssais" - JSON array
+      Logic: Match SST and SD
+
+    Lines 331-343: Filter by plmn_list
+      Spec: Query param "plmn-list" - JSON array
+      Logic: Match MCC and MNC
+
+    Line 346-347: Only return REGISTERED NFs
+      Spec: Undiscoverable NFs not returned
+
+    Lines 350: Sort by priority, capacity
+      Spec: TS 29.510 Section 5.2.3.2.3 - Ordering
+
+    Lines 353-354: Apply limit
+      Spec: Query param "limit"
+
+
+LINES 394-430: OAUTH2 TOKEN ENDPOINT
+--------------------------------------------------------------------------------
+
+Line 395: @app.post("/oauth2/token", response_model=OAuth2Token)
+  Spec: 3GPP TS 29.510 - Section 5.4.2.2.1
+        Path: {apiRoot}/oauth2/token
+  YAML: TS29510_Nnrf_AccessToken.yaml
+
+  Request: grant_type=client_credentials, scope=...
+  Response: access_token, token_type, expires_in, scope
+
+  RFC 6749 Section 4.4 - Client Credentials Grant Flow
+
+
+LINES 432-476: NF REGISTRATION (PUT)
+--------------------------------------------------------------------------------
+
+Lines 433-434: @app.put("/nnrf-nfm/v1/nf-instances/{nfInstanceId}")
+  Spec: 3GPP TS 29.510 - Section 5.2.2.2.1 NFRegister
+        "Nnrf_NFManagement service, RegisterNFInstance operation"
+  YAML: TS29510_Nnrf_NFManagement.yaml - paths./nf-instances/{nfInstanceId}.put
+
+  Method: PUT (creates or replaces)
+  Path: /nnrf-nfm/v1/nf-instances/{nfInstanceId}
+  Body: NFProfile
+
+  Response Codes:
+    - 200: Updated existing registration
+    - 201: New registration created
+    - 400: Invalid NFProfile
+    - 401: Unauthorized (missing/invalid token)
+
+  Your Implementation:
+    - Validates nfInstanceId matches profile
+    - Sets recoveryTime if not provided
+    - Stores in nf_profiles dict
+    - Returns registered profile
+
+
+LINES 477-487: GET NF INSTANCE
+--------------------------------------------------------------------------------
+
+Lines 478-479: @app.get("/nnrf-nfm/v1/nf-instances/{nfInstanceId}")
+  Spec: 3GPP TS 29.510 - Section 5.2.2.3.1 NFProfileRetrieval
+  YAML: TS29510_Nnrf_NFManagement.yaml - paths./nf-instances/{nfInstanceId}.get
+
+  Response: NFProfile or 404
+
+
+LINES 489-515: UPDATE NF INSTANCE (PATCH)
+--------------------------------------------------------------------------------
+
+Lines 490-491: @app.patch("/nnrf-nfm/v1/nf-instances/{nfInstanceId}")
+  Spec: 3GPP TS 29.510 - Section 5.2.2.4.1 NFUpdate
+  YAML: paths./nf-instances/{nfInstanceId}.patch
+
+  Body: JSON Patch (RFC 6902) operations
+  Operations: add, remove, replace, move, copy, test
+
+  Your Implementation (simplified):
+    - Only handles "replace" for /nfStatus and /load
+    - Full impl should support all patch operations
+
+
+LINES 517-529: DEREGISTER NF INSTANCE (DELETE)
+--------------------------------------------------------------------------------
+
+Lines 518-519: @app.delete("/nnrf-nfm/v1/nf-instances/{nfInstanceId}")
+  Spec: 3GPP TS 29.510 - Section 5.2.2.5.1 NFDeregister
+  YAML: paths./nf-instances/{nfInstanceId}.delete
+
+  Response: 204 No Content (success) or 404
+
+
+LINES 531-592: NF DISCOVERY (GET)
+--------------------------------------------------------------------------------
+
+Lines 532-533: @app.get("/nnrf-disc/v1/nf-instances")
+  Spec: 3GPP TS 29.510 - Section 5.2.3.2.1 NFDiscover
+        "Nnrf_NFDiscovery service, SearchNFInstances operation"
+  YAML: TS29510_Nnrf_NFDiscovery.yaml - paths./nf-instances.get
+
+  Query Parameters (all optional):
+    - target-nf-type: NFType to find
+    - requester-nf-type: Who is asking
+    - service-names: Specific services needed
+    - snssais: Network slice filter
+    - plmn-list: PLMN filter
+    - dnn: Data Network Name filter
+    - limit: Max results
+
+  Response: SearchResult with matching NFProfiles
+
+  Caching: validityPeriod tells caller how long to cache
+           (your impl: 3600 seconds = 1 hour)
+
+
+LINES 594-620: NF STATUS SUBSCRIPTION
+--------------------------------------------------------------------------------
+
+Lines 595-596: @app.post("/nnrf-nfm/v1/subscriptions")
+  Spec: 3GPP TS 29.510 - Section 5.2.4.2.1 NFStatusSubscribe
+  YAML: TS29510_Nnrf_NFManagement.yaml - paths./subscriptions.post
+
+  Body: SubscriptionData
+  Response: SubscriptionData with subscriptionId
+
+  Use: NF subscribes to be notified of other NF status changes
+  Callback: NRF POSTs to nfStatusNotificationUri when status changes
+
+
+LINES 622-675: LEGACY ENDPOINTS (BACKWARD COMPATIBILITY)
+--------------------------------------------------------------------------------
+
+Lines 623-653: @app.post("/register")
+  Spec: NOT in 3GPP - simplified legacy endpoint
+  Note: Converts to NFProfile internally
+
+Lines 655-675: @app.get("/discover/{nf_type}")
+  Spec: NOT in 3GPP - simplified legacy endpoint
+  Note: Should use /nnrf-disc/v1/nf-instances?target-nf-type=...
+
+
+LINES 677-703: HEALTH AND METRICS
+--------------------------------------------------------------------------------
+
+Lines 678-688: @app.get("/health")
+  Spec: Not in 3GPP
+  Alt:  Cloud-native health check convention
+        Kubernetes liveness/readiness probes
+
+Lines 690-703: @app.get("/metrics")
+  Spec: Prometheus Exposition Format
+        OpenMetrics (CNCF)
+  Use:  Operational metrics for monitoring
+
+
+================================================================================
+OPENTELEMETRY SPAN ATTRIBUTES USED
+================================================================================
+
+Your nrf.py uses these tracing attributes:
+
+  span.set_attribute("3gpp.service", "Nnrf_NFManagement")
+    Custom attribute identifying the 3GPP service
+
+  span.set_attribute("3gpp.operation", "RegisterNFInstance")
+    Custom attribute identifying the operation
+
+  span.set_attribute("nf.instance_id", nfInstanceId)
+    NF identifier for correlation
+
+  span.set_attribute("nf.type", nf_profile.nfType)
+    NF type for filtering traces
+
+  span.set_attribute("grant_type", token_request.grant_type)
+    OAuth2 grant type
+
+  span.set_attribute("token.generated", "SUCCESS")
+    Token generation status
+
+  span.set_attribute("target_nf_type", ...)
+    Discovery target
+
+  span.set_attribute("discovered.count", len(discovered_nfs))
+    Discovery result count
+
+
+================================================================================
+GAPS VS FULL TS 29.510 COMPLIANCE
+================================================================================
+
+Operations NOT implemented:
+  - NFStatusNotify (callback to subscribers)
+  - NFListRetrieval (paginated NF list)
+  - SCPDomainRoutingInfoRetrieval
+  - NFListRetrievalComplete
+
+Features NOT implemented:
+  - Full NFProfile (60+ fields, you have ~40)
+  - NF Sets and NF Services Sets
+  - SCP (Service Communication Proxy) awareness
+  - NF Profile changes subscription
+  - Bootstrapping service (initial NRF discovery)
+
+Security gaps:
+  - Using HS256 (should be RS256 with PKI)
+  - No client authentication (grant_type only)
+  - No scope validation per operation
+
+
+================================================================================
+SPECIFICATION FILE LOCATIONS
+================================================================================
+
+Primary Specs:
+  90_Work-Telco/3GPP/Rel-19/29_series/29510-j40.docx
+  90_Work-Telco/3GPP/Rel-19/29_series/TS29510_Nnrf_NFManagement.yaml
+  90_Work-Telco/3GPP/Rel-19/29_series/TS29510_Nnrf_NFDiscovery.yaml
+  90_Work-Telco/3GPP/Rel-19/29_series/TS29510_Nnrf_AccessToken.yaml
+  90_Work-Telco/3GPP/Rel-19/29_series/29500-j40.docx
+  90_Work-Telco/3GPP/Rel-19/29_series/TS29571_CommonData.yaml
+
+Related Networking Knowledge:
+  21_Networking_Public_Data/21_Authentication/ (OAuth2, JWT)
+  21_Networking_Public_Data/22_Application_Security/ (TLS)
+  21_Networking_Public_Data/45_Telecom_5G_NFs/ (NRF role)
+
+
+================================================================================
+                         END OF SPECIFICATION MAP
+================================================================================

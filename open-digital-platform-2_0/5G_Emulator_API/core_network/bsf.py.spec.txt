@@ -1,0 +1,256 @@
+================================================================================
+                    SPECIFICATION MAP: bsf.py
+           Binding Support Function - Spec Reference Bridge
+================================================================================
+
+Source File: 5G_Emulator_API/core_network/bsf.py
+Generated:   2026-01-10
+Lines:       512
+Purpose:     Map each code section to governing 3GPP specifications
+Based On:    Open5GS, Free5GC BSF implementations
+
+================================================================================
+PRIMARY GOVERNING SPECIFICATIONS
+================================================================================
+
+3GPP TS 29.521 - Binding Support Function Services
+  Location: 90_Work-Telco/3GPP/Rel-19/29_series/
+  Scope: Nbsf_Management service for PCF binding management
+  Key Sections:
+    - Section 5.2: Nbsf_Management service
+    - Section 5.2.2: PCF binding operations
+    - Section 6.1: API definitions
+
+3GPP TS 23.501 - System Architecture for 5G System
+  Location: 90_Work-Telco/3GPP/Rel-19/23_series/
+  Scope: BSF functional description
+  Key Sections:
+    - Section 6.2.18: BSF
+
+3GPP TS 29.571 - Common Data Types
+  Location: 90_Work-Telco/3GPP/Rel-19/29_series/
+  Scope: IP address, S-NSSAI data types
+
+
+================================================================================
+LINE-BY-LINE SPECIFICATION MAPPING
+================================================================================
+
+
+LINES 1-28: MODULE HEADER AND IMPORTS
+--------------------------------------------------------------------------------
+
+Lines 1-4: Module Documentation
+  Reference: Open5GS, Free5GC BSF
+  3GPP Specs: TS 29.521
+
+Lines 6-18: Imports
+  - FastAPI: HTTP API framework
+  - OpenTelemetry: Distributed tracing
+
+
+LINES 29-91: DATA MODELS
+--------------------------------------------------------------------------------
+
+Lines 31-34: class BindingLevel(Enum)
+  Spec: TS 29.521 Section 6.1.6.3.2 - BindingLevel
+  Values: NF_SET, NF_INSTANCE
+
+Lines 35-38: class AddressDomain(Enum)
+  Purpose: IP address domain indicator
+
+Lines 39-52: class PlmnId, Snssai, IpEndPoint
+  Spec: TS 29.571 - Common Data Types
+
+Lines 53-77: class PcfBinding
+  Spec: TS 29.521 Section 6.1.6.2.2 - PcfBinding
+
+  PCF Binding per TS 29.521:
+    - supi/gpsi: Subscriber identifiers
+    - ipv4Addr/ipv6Prefix: UE IP addresses
+    - macAddr48: MAC address
+    - dnn: Data Network Name
+    - pcfFqdn/pcfIpEndPoints: PCF location
+    - pcfDiamHost/pcfDiamRealm: Diameter info
+    - snssai: S-NSSAI
+    - pcfId/pcfSetId: PCF instance/set
+    - bindLevel: NF_SET or NF_INSTANCE
+
+Lines 78-87: class PcfBindingPatch
+  Spec: TS 29.521 Section 6.1.6.2.3 - PcfBindingPatch
+  Used for PATCH operations
+
+Lines 88-91: class DiscoveryResult
+  Spec: TS 29.521 Section 6.1.6.2.4 - BindingResp
+
+
+LINES 92-99: BSF STORAGE
+--------------------------------------------------------------------------------
+
+Lines 93-98: Storage structures
+
+  Indexes for efficient lookup:
+    - pcf_bindings: Main binding storage
+    - ipv4_binding_index: IPv4 -> binding_id
+    - ipv6_binding_index: IPv6 -> binding_id
+    - supi_binding_index: SUPI -> [binding_ids]
+
+
+LINES 100-256: BSF CLASS
+--------------------------------------------------------------------------------
+
+Lines 100-105: class BSF.__init__
+  Spec: TS 29.521 - BSF info
+
+Lines 106-130: create_binding()
+  Spec: TS 29.521 Section 5.2.2.2 - Register Binding
+
+  Procedure:
+    1. Validate required fields (PCF info, UE address)
+    2. Store binding
+    3. Update lookup indexes
+
+Lines 132-183: find_bindings()
+  Spec: TS 29.521 Section 5.2.2.3 - Discover Binding
+
+  Search criteria per TS 29.521:
+    - ipv4Addr: UE IPv4 address
+    - ipv6Prefix: UE IPv6 prefix
+    - macAddr48: UE MAC address
+    - dnn: Data Network Name
+    - supi/gpsi: Subscriber identifiers
+    - snssai: S-NSSAI
+
+  Fast path using indexes for IP lookups
+
+Lines 185-199: _matches_criteria()
+  Helper to check additional criteria (DNN, S-NSSAI)
+
+Lines 201-235: update_binding()
+  Spec: TS 29.521 Section 5.2.2.4 - Update Binding
+
+  Updates binding and maintains indexes
+
+Lines 237-256: delete_binding()
+  Spec: TS 29.521 Section 5.2.2.5 - Deregister Binding
+
+  Cleans up binding and all indexes
+
+
+LINES 258-308: NRF REGISTRATION
+--------------------------------------------------------------------------------
+
+Lines 261-308: lifespan() - Startup/Shutdown
+  Spec: TS 29.510 - Nnrf_NFManagement service
+
+  NF Profile per TS 29.510:
+    - nfServices: nbsf-management
+    - bsfInfo: DNN list, IP domain list, IP ranges
+
+
+LINES 326-471: NBSF_MANAGEMENT SERVICE ENDPOINTS
+--------------------------------------------------------------------------------
+
+Lines 329-360: create_pcf_binding()
+  Spec: TS 29.521 Section 5.2.2.2.1 - Register Binding
+  Service: Nbsf_Management
+  Operation: RegisterBinding
+  Interface: N5 (NEF/AF-BSF), N36 (PCF-BSF)
+
+  API: POST /nbsf-management/v1/pcfBindings
+
+  Creates PCF-UE binding for later discovery
+
+Lines 362-414: discover_pcf_binding()
+  Spec: TS 29.521 Section 5.2.2.3.1 - Discover Binding
+  Service: Nbsf_Management
+  Operation: DiscoverBinding
+
+  API: GET /nbsf-management/v1/pcfBindings
+
+  Query Parameters per TS 29.521:
+    - ipv4Addr: UE IPv4 address
+    - ipv6Prefix: UE IPv6 prefix
+    - macAddr48: UE MAC address
+    - dnn: Data Network Name
+    - supi: SUPI
+    - gpsi: GPSI
+    - snssai: S-NSSAI (JSON)
+    - ipDomain: IP domain
+
+Lines 416-425: get_pcf_binding()
+  Spec: TS 29.521 Section 5.2.2.3.2 - Get Individual Binding
+  API: GET /nbsf-management/v1/pcfBindings/{bindingId}
+
+Lines 427-455: update_pcf_binding()
+  Spec: TS 29.521 Section 5.2.2.4.1 - Update Binding
+  API: PATCH /nbsf-management/v1/pcfBindings/{bindingId}
+
+Lines 457-471: delete_pcf_binding()
+  Spec: TS 29.521 Section 5.2.2.5.1 - Deregister Binding
+  API: DELETE /nbsf-management/v1/pcfBindings/{bindingId}
+
+
+LINES 473-512: HEALTH AND MANAGEMENT
+--------------------------------------------------------------------------------
+
+Lines 475-495: Health and metrics
+  Returns:
+    - Total bindings
+    - IPv4/IPv6 binding counts
+    - Unique SUPIs
+
+Lines 498-507: list_all_bindings()
+  Debug endpoint for listing all bindings
+
+
+================================================================================
+SPECIFICATION CROSS-REFERENCE TABLE
+================================================================================
+
+| Code Section        | Primary Spec | Section        |
+|---------------------|--------------|----------------|
+| BindingLevel        | TS 29.521    | 6.1.6.3.2      |
+| PcfBinding          | TS 29.521    | 6.1.6.2.2      |
+| PcfBindingPatch     | TS 29.521    | 6.1.6.2.3      |
+| DiscoveryResult     | TS 29.521    | 6.1.6.2.4      |
+| create_binding      | TS 29.521    | 5.2.2.2        |
+| find_bindings       | TS 29.521    | 5.2.2.3        |
+| update_binding      | TS 29.521    | 5.2.2.4        |
+| delete_binding      | TS 29.521    | 5.2.2.5        |
+| NRF registration    | TS 29.510    | 5.2.2.2        |
+
+
+================================================================================
+BSF PURPOSE AND WORKFLOW (TS 23.501)
+================================================================================
+
+BSF Purpose:
+  - Store binding between UE address/identifier and PCF
+  - Enable discovery of serving PCF by other NFs
+  - Support policy continuity during inter-SMF handover
+
+Typical Workflow:
+  1. SMF establishes PDU session
+  2. SMF selects PCF and gets SM policy
+  3. SMF registers PCF binding with BSF
+  4. Later, NEF/AF needs to influence UE traffic
+  5. NEF/AF discovers PCF via BSF using UE address
+  6. NEF/AF contacts PCF to apply policy
+
+
+================================================================================
+BSF INTERFACE MAPPING
+================================================================================
+
+| Interface | Connected NF | Service          | Purpose                    |
+|-----------|--------------|------------------|----------------------------|
+| Nbsf      | SMF          | Nbsf_Management  | Register PCF binding       |
+| Nbsf      | NEF/AF       | Nbsf_Management  | Discover PCF binding       |
+| Nbsf      | PCF          | Nbsf_Management  | Binding management         |
+| Nnrf      | NRF          | Nnrf_NFManagement| NF registration            |
+
+
+================================================================================
+                              END OF DOCUMENT
+================================================================================

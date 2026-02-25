@@ -1,0 +1,249 @@
+================================================================================
+                    SPECIFICATION MAP: udm.py
+           Unified Data Management - Spec Reference Bridge
+================================================================================
+
+Source File: 5G_Emulator_API/core_network/udm.py
+Generated:   2026-01-10
+Lines:       622
+Purpose:     Map each code section to governing 3GPP specifications
+Based On:    Open5GS, Free5GC UDM implementations
+
+================================================================================
+PRIMARY GOVERNING SPECIFICATIONS
+================================================================================
+
+3GPP TS 29.503 - UDM Services
+  Location: 90_Work-Telco/3GPP/Rel-19/29_series/
+  Scope: Nudm_UECM, Nudm_SDM, Nudm_UEAU, Nudm_EE, Nudm_PP services
+  Key Sections:
+    - Section 5.2: Nudm_UECM (UE Context Management)
+    - Section 5.3: Nudm_SDM (Subscriber Data Management)
+    - Section 5.4: Nudm_UEAU (UE Authentication)
+
+3GPP TS 29.505 - Subscription Data Management Services
+  Location: 90_Work-Telco/3GPP/Rel-19/29_series/
+  Scope: Subscription data retrieval
+  Key Sections:
+    - Section 5.2.2: AM data
+    - Section 5.2.3: SM data
+
+3GPP TS 29.510 - NRF NF Management Service
+  Location: 90_Work-Telco/3GPP/Rel-19/29_series/29510-j30.docx
+  Scope: NF registration with NRF
+
+
+================================================================================
+LINE-BY-LINE SPECIFICATION MAPPING
+================================================================================
+
+
+LINES 1-28: MODULE HEADER AND IMPORTS
+--------------------------------------------------------------------------------
+
+Lines 1-3: Module Documentation
+  Reference: Open5GS, Free5GC UDM
+  3GPP Specs: TS 29.503, TS 29.505
+
+
+LINES 29-140: DATA MODELS
+--------------------------------------------------------------------------------
+
+Lines 30-44: class PlmnId, Snssai, Guami, Tai
+  Spec: TS 29.571 - Common Data Types
+
+Lines 46-66: class AccessAndMobilitySubscriptionData
+  Spec: TS 29.505 Section 5.4.2.2 - AccessAndMobilitySubscriptionData
+
+  Fields per TS 29.505:
+    - gpsis: Generic Public Subscription Identifiers
+    - subscribedUeAmbr: UE AMBR
+    - nssai: Subscribed NSSAI
+    - ratRestrictions: RAT restrictions
+    - serviceAreaRestriction: Service area restrictions
+    - rfspIndex: RAT/Frequency Selection Priority
+
+Lines 68-78: class SessionManagementSubscriptionData
+  Spec: TS 29.505 Section 5.4.2.3 - SmfSelectionSubscriptionData
+
+  Fields:
+    - singleNssai: S-NSSAI
+    - dnnConfigurations: Per-DNN configuration
+
+Lines 80-92: class AuthenticationSubscription
+  Spec: TS 29.503 Section 6.2.6.2.2 - AuthenticationSubscription
+  Spec: TS 33.501 - Authentication credentials
+
+  Fields:
+    - authenticationMethod: 5G_AKA or EAP_AKA_PRIME
+    - encPermanentKey: Encrypted K
+    - sequenceNumber: SQN
+    - authenticationManagementField: AMF
+
+Lines 94-115: class AmfRegistration
+  Spec: TS 29.503 Section 6.2.6.2.3 - Amf3GppAccessRegistration
+
+  Fields per TS 29.503:
+    - amfInstanceId: AMF ID
+    - deregCallbackUri: Deregistration callback
+    - guami: Globally Unique AMF ID
+    - pei: Permanent Equipment Identifier
+
+Lines 121-133: class AuthenticationVector, AuthEvent
+  Spec: TS 29.503 Section 6.2.6.2.7 - AuthenticationVector
+
+
+LINES 142-255: UDM CLASS
+--------------------------------------------------------------------------------
+
+Lines 142-151: class UDM.__init__
+  Supported services per TS 29.503:
+    - nudm-uecm: UE Context Management
+    - nudm-sdm: Subscriber Data Management
+    - nudm-ueau: UE Authentication
+    - nudm-ee: Event Exposure
+    - nudm-pp: Parameter Provisioning
+
+Lines 153-217: _initialize_default_subscription_data()
+  Purpose: Test data initialization
+
+  Creates per-SUPI data:
+    - AM subscription data (lines 162-178)
+    - SM subscription data (lines 180-208)
+    - Authentication subscription (lines 210-217)
+
+Lines 219-228: get_subscription_data_from_udr()
+  Spec: TS 29.504 - Nudr_DataRepository service
+  Interface: N35 (UDM-UDR)
+
+Lines 230-254: generate_authentication_vector()
+  Spec: TS 33.501 Section 6.1.3 - AV generation
+  Spec: TS 29.503 Section 5.4.2.2 - Generate auth data
+
+  Generates AV with:
+    - RAND, XRES, AUTN, KAUSF
+
+
+LINES 256-326: NRF REGISTRATION
+--------------------------------------------------------------------------------
+
+Lines 258-319: lifespan() - Startup/Shutdown
+  Spec: TS 29.510 - Nnrf_NFManagement service
+
+  NF Profile per TS 29.510:
+    - nfServices: nudm-uecm, nudm-sdm, nudm-ueau
+    - udmInfo: SUPI ranges, GPSI ranges, routing indicators
+
+
+LINES 328-418: NUDM_UECM SERVICE
+--------------------------------------------------------------------------------
+
+Lines 329-372: amf_registration()
+  Spec: TS 29.503 Section 5.2.2.2.1 - AMF Registration
+  Service: Nudm_UECM
+  Operation: Registration
+  Interface: N8 (AMF-UDM)
+
+  Procedure per TS 29.503:
+    1. Validate registration data
+    2. Store AMF registration
+    3. Update UE context
+
+Lines 374-383: get_amf_registration()
+  Spec: TS 29.503 Section 5.2.2.3.1 - Get Registration
+
+Lines 385-403: update_amf_registration()
+  Spec: TS 29.503 Section 5.2.2.4.1 - Update Registration
+
+Lines 405-418: amf_deregistration()
+  Spec: TS 29.503 Section 5.2.2.5.1 - Deregistration
+
+
+LINES 420-525: NUDM_SDM SERVICE
+--------------------------------------------------------------------------------
+
+Lines 421-451: get_access_mobility_subscription_data()
+  Spec: TS 29.505 Section 5.2.2.2.1 - Get AM Data
+  Service: Nudm_SDM
+  Operation: Get
+  Interface: N10 (AMF-UDM for SDM)
+
+  Returns AccessAndMobilitySubscriptionData
+
+Lines 453-495: get_session_management_subscription_data()
+  Spec: TS 29.505 Section 5.2.2.2.2 - Get SM Data
+
+  Returns SessionManagementSubscriptionData
+  Optional filtering by DNN and S-NSSAI
+
+Lines 497-525: get_nssai()
+  Spec: TS 29.505 Section 5.2.2.2.3 - Get NSSAI
+
+  Returns subscribed NSSAI
+
+
+LINES 527-582: NUDM_UEAU SERVICE
+--------------------------------------------------------------------------------
+
+Lines 528-582: generate_authentication_data()
+  Spec: TS 29.503 Section 5.4.2.2.1 - Generate Auth Data
+  Service: Nudm_UEAU
+  Operation: GenerateAuthData
+  Interface: N13 (AUSF-UDM)
+
+  Procedure per TS 29.503:
+    1. Validate request
+    2. Generate authentication vector
+    3. Store authentication event
+    4. Return AuthenticationInfoResult
+
+
+LINES 584-622: HEALTH AND METRICS
+--------------------------------------------------------------------------------
+
+Lines 596-605: health_check()
+  Returns registered UE count
+
+Lines 607-618: get_metrics()
+  Returns:
+    - Total AMF registrations
+    - Active UEs
+    - Authentication events
+
+
+================================================================================
+SPECIFICATION CROSS-REFERENCE TABLE
+================================================================================
+
+| Code Section                        | Primary Spec | Section        |
+|-------------------------------------|--------------|----------------|
+| AccessAndMobilitySubscriptionData   | TS 29.505    | 5.4.2.2        |
+| SessionManagementSubscriptionData   | TS 29.505    | 5.4.2.3        |
+| AuthenticationSubscription          | TS 29.503    | 6.2.6.2.2      |
+| AmfRegistration                     | TS 29.503    | 6.2.6.2.3      |
+| AuthenticationVector                | TS 29.503    | 6.2.6.2.7      |
+| amf_registration                    | TS 29.503    | 5.2.2.2.1      |
+| get_amf_registration                | TS 29.503    | 5.2.2.3.1      |
+| amf_deregistration                  | TS 29.503    | 5.2.2.5.1      |
+| get_access_mobility_subscription    | TS 29.505    | 5.2.2.2.1      |
+| get_session_management_subscription | TS 29.505    | 5.2.2.2.2      |
+| get_nssai                           | TS 29.505    | 5.2.2.2.3      |
+| generate_authentication_data        | TS 29.503    | 5.4.2.2.1      |
+
+
+================================================================================
+UDM INTERFACE MAPPING
+================================================================================
+
+| Interface | Connected NF | Service           | Purpose                    |
+|-----------|--------------|-------------------|----------------------------|
+| N8        | AMF          | Nudm_UECM         | UE Context Management      |
+| N10       | SMF          | Nudm_SDM          | Session Mgmt Subscription  |
+| N10       | AMF          | Nudm_SDM          | AM Subscription Data       |
+| N13       | AUSF         | Nudm_UEAU         | UE Authentication          |
+| N35       | UDR          | Nudr_DataRepository| Subscription Data Storage |
+
+
+================================================================================
+                              END OF DOCUMENT
+================================================================================

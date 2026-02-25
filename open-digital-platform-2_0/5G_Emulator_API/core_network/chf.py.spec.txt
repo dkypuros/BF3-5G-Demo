@@ -1,0 +1,331 @@
+================================================================================
+                    SPECIFICATION MAP: chf.py
+           Charging Function - Spec Reference Bridge
+================================================================================
+
+Source File: 5G_Emulator_API/core_network/chf.py
+Generated:   2026-01-10
+Lines:       758
+Purpose:     Map each code section to governing 3GPP specifications
+Based On:    Free5GC CHF implementation
+
+================================================================================
+PRIMARY GOVERNING SPECIFICATIONS
+================================================================================
+
+3GPP TS 32.290 - Charging Management; 5G System Charging Service
+  Location: 90_Work-Telco/3GPP/Rel-19/32_series/
+  Scope: Converged charging architecture
+  Key Sections:
+    - Section 6: Charging function description
+    - Section 7: Charging procedures
+
+3GPP TS 32.291 - Charging Service; Stage 3
+  Location: 90_Work-Telco/3GPP/Rel-19/32_series/
+  Scope: Nchf_ConvergedCharging API
+  Key Sections:
+    - Section 5.2: Converged Charging procedures
+    - Section 6.1: API definitions
+
+3GPP TS 29.594 - Spending Limit Control Service
+  Location: 90_Work-Telco/3GPP/Rel-19/29_series/
+  Scope: Nchf_SpendingLimitControl API
+
+3GPP TS 32.255 - 5G Data Connectivity Charging
+  Location: 90_Work-Telco/3GPP/Rel-19/32_series/
+  Scope: PDU session charging
+
+
+================================================================================
+LINE-BY-LINE SPECIFICATION MAPPING
+================================================================================
+
+
+LINES 1-29: MODULE HEADER AND IMPORTS
+--------------------------------------------------------------------------------
+
+Lines 1-4: Module Documentation
+  Reference: Free5GC CHF
+  3GPP Specs: TS 32.290, TS 32.291
+
+Lines 6-19: Imports
+  - FastAPI: HTTP API framework
+  - Decimal: Precise monetary calculations
+  - OpenTelemetry: Distributed tracing
+
+
+LINES 30-203: DATA MODELS
+--------------------------------------------------------------------------------
+
+Lines 32-38: class ChargingNotifyType(Enum)
+  Spec: TS 32.291 Section 6.1.6.3.2 - NotificationType
+
+  Types:
+    - REAUTHORIZATION: Quota reauthorization needed
+    - ABORT_CHARGING: Abort charging session
+    - FINAL: Final notification
+
+Lines 39-72: class TriggerType(Enum)
+  Spec: TS 32.291 Section 6.1.6.3.3 - Trigger
+
+  Charging triggers per TS 32.291:
+    - QUOTA_THRESHOLD: Quota threshold reached
+    - QUOTA_EXHAUSTED: Quota depleted
+    - VALIDITY_TIME: Validity expired
+    - QOS_CHANGE: QoS parameters changed
+    - VOLUME_LIMIT/TIME_LIMIT: Usage limits
+    - PLMN_CHANGE: Network change
+    - And many more...
+
+Lines 73-85: class SessionFailover, ResultCode(Enum)
+  Spec: TS 32.291 Section 6.1.6.3
+
+  Result codes:
+    - SUCCESS: Charging succeeded
+    - QUOTA_LIMIT_REACHED: No remaining quota
+    - USER_UNKNOWN: Subscriber not found
+    - RATING_FAILED: Rating error
+
+Lines 86-107: class UsedUnitContainer
+  Spec: TS 32.291 Section 6.1.6.2.20 - UsedUnitContainer
+
+  Usage reporting per TS 32.291:
+    - time: Time used (seconds)
+    - totalVolume: Total bytes
+    - uplinkVolume/downlinkVolume: Directional usage
+    - triggers: What triggered the report
+    - localSequenceNumber: Report sequence
+
+Lines 108-122: class RequestedUnit, GrantedUnit
+  Spec: TS 32.291 Section 6.1.6.2.18/19
+
+  Quota request/grant structure:
+    - time: Time quota
+    - totalVolume: Volume quota
+    - validityTime: Quota validity period
+
+Lines 124-129: class FinalUnitIndication
+  Spec: TS 32.291 Section 6.1.6.2.21 - FinalUnitIndication
+
+  Actions when quota exhausted:
+    - TERMINATE: Terminate session
+    - REDIRECT: Redirect to portal
+
+Lines 130-148: class MultipleUnitUsage/Information
+  Spec: TS 32.291 Section 6.1.6.2.3/4
+
+  Per-rating-group quota handling
+
+Lines 150-158: class PDUSessionChargingInformation
+  Spec: TS 32.291 Section 6.1.6.2.31
+
+Lines 160-187: class ChargingDataRequest/Response
+  Spec: TS 32.291 Section 6.1.6.2.1/2
+
+  Request contains:
+    - subscriberIdentifier: SUPI
+    - invocationTimeStamp: Request time
+    - multipleUnitUsage: Usage/quota per rating group
+
+  Response contains:
+    - multipleUnitInformation: Granted quota
+    - triggers: Next reporting triggers
+
+Lines 188-203: Spending Limit Models
+  Spec: TS 29.594 - SpendingLimitContext/Status
+
+
+LINES 204-233: RATING CONFIGURATION
+--------------------------------------------------------------------------------
+
+Lines 205-233: class RatingConfig
+  Purpose: Simplified rating rules
+
+  Rating rules per rating group:
+    - Rate per MB
+    - Rate per minute
+
+  Default quotas:
+    - Time quota
+    - Volume quota
+
+
+LINES 235-463: CHF CLASS
+--------------------------------------------------------------------------------
+
+Lines 235-246: class CHF.__init__
+  Spec: TS 32.291 - CHF info
+
+Lines 247-288: create_charging_session()
+  Spec: TS 32.291 Section 5.2.2.2 - Initial Charging
+
+  Procedure per TS 32.291:
+    1. Create charging session context
+    2. Process quota requests per rating group
+    3. Grant initial quotas
+    4. Set reporting triggers
+
+Lines 290-326: update_charging_session()
+  Spec: TS 32.291 Section 5.2.2.3 - Update Charging
+
+  Handles:
+    - Recording used units
+    - Calculating charges
+    - Granting new quotas
+
+Lines 327-363: release_charging_session()
+  Spec: TS 32.291 Section 5.2.2.4 - Final Charging
+
+  Procedure:
+    1. Process final usage
+    2. Generate CDR
+    3. Close session
+
+Lines 364-410: _process_quota_request()
+  Spec: TS 32.291 Section 5.2.2.2.2 - Quota determination
+
+  Checks balance, grants quota per rating group
+
+Lines 412-437: _record_usage()
+  Purpose: Record usage and calculate charges
+
+  Calculates:
+    - Time-based charges
+    - Volume-based charges
+
+Lines 438-462: _generate_cdr()
+  Spec: TS 32.297 - CDR file format (simplified)
+
+  CDR contains:
+    - Session identifiers
+    - Start/end times
+    - Total usage
+    - Total charge
+
+
+LINES 471-523: NRF REGISTRATION
+--------------------------------------------------------------------------------
+
+Lines 471-523: lifespan() - Startup/Shutdown
+  Spec: TS 29.510 - Nnrf_NFManagement service
+
+  NF Profile per TS 29.510:
+    - nfServices: nchf-convergedcharging, nchf-spendinglimitcontrol
+    - chfInfo: SUPI ranges, GPSI ranges, PLMN ranges
+
+
+LINES 542-617: NCHF_CONVERGEDCHARGING SERVICE
+--------------------------------------------------------------------------------
+
+Lines 544-566: create_charging_data()
+  Spec: TS 32.291 Section 5.2.2.2.1 - Create Charging Data
+  Service: Nchf_ConvergedCharging
+  Operation: Create
+  Interface: N40 (SMF-CHF)
+
+  API: POST /nchf-convergedcharging/v3/chargingData
+
+Lines 568-593: update_charging_data()
+  Spec: TS 32.291 Section 5.2.2.3.1 - Update Charging Data
+  API: POST /nchf-convergedcharging/v3/chargingData/{ref}/update
+
+Lines 595-617: release_charging_data()
+  Spec: TS 32.291 Section 5.2.2.4.1 - Release Charging Data
+  API: POST /nchf-convergedcharging/v3/chargingData/{ref}/release
+
+
+LINES 619-666: NCHF_SPENDINGLIMITCONTROL SERVICE
+--------------------------------------------------------------------------------
+
+Lines 621-642: subscribe_spending_limit()
+  Spec: TS 29.594 Section 5.2.2.2 - Subscribe
+  Service: Nchf_SpendingLimitControl
+  Interface: N28 (PCF-CHF)
+
+  API: POST /nchf-spendinglimitcontrol/v1/subscriptions
+
+Lines 644-666: Spending limit management
+  - GET /subscriptions/{id}: Get status
+  - DELETE /subscriptions/{id}: Unsubscribe
+
+
+LINES 668-723: MANAGEMENT ENDPOINTS
+--------------------------------------------------------------------------------
+
+Lines 670-698: Session and CDR management
+  - GET /chf/sessions: List sessions
+  - GET /chf/cdrs: List CDRs
+  - GET /chf/rating-config: Get rating rules
+
+Lines 710-723: Subscriber balance management
+  - POST /chf/subscriber-balance: Set balance
+  - GET /chf/subscriber-balance/{supi}: Get balance
+
+
+LINES 725-758: HEALTH AND METRICS
+--------------------------------------------------------------------------------
+
+Lines 727-753: Health and metrics
+  Returns:
+    - Active/closed sessions
+    - Total CDRs
+    - Total revenue
+    - Spending limit subscriptions
+
+
+================================================================================
+SPECIFICATION CROSS-REFERENCE TABLE
+================================================================================
+
+| Code Section              | Primary Spec | Section        |
+|---------------------------|--------------|----------------|
+| ChargingNotifyType        | TS 32.291    | 6.1.6.3.2      |
+| TriggerType               | TS 32.291    | 6.1.6.3.3      |
+| ResultCode                | TS 32.291    | 6.1.6.3.4      |
+| UsedUnitContainer         | TS 32.291    | 6.1.6.2.20     |
+| GrantedUnit               | TS 32.291    | 6.1.6.2.19     |
+| MultipleUnitUsage         | TS 32.291    | 6.1.6.2.3      |
+| ChargingDataRequest       | TS 32.291    | 6.1.6.2.1      |
+| ChargingDataResponse      | TS 32.291    | 6.1.6.2.2      |
+| create_charging_data      | TS 32.291    | 5.2.2.2.1      |
+| update_charging_data      | TS 32.291    | 5.2.2.3.1      |
+| release_charging_data     | TS 32.291    | 5.2.2.4.1      |
+| SpendingLimitControl      | TS 29.594    | 5.2.2          |
+
+
+================================================================================
+CONVERGED CHARGING FLOW (TS 32.291)
+================================================================================
+
+    SMF                     CHF                    OCS/OFCS
+     |                       |                        |
+     |--Create (Initial)--->|                        |
+     |                       |---Rating Request----->|
+     |                       |<--Rating Response-----|
+     |<--Initial Response---|                        |
+     |                       |                        |
+     |   [Traffic flows]     |                        |
+     |                       |                        |
+     |--Update (Interim)--->|                        |
+     |                       |---Record Usage------->|
+     |<--Update Response----|                        |
+     |                       |                        |
+     |--Release (Final)---->|                        |
+     |                       |---Generate CDR------->|
+     |<--Release Response---|                        |
+
+
+================================================================================
+CHF INTERFACE MAPPING
+================================================================================
+
+| Interface | Connected NF | Service                  | Purpose            |
+|-----------|--------------|--------------------------|---------------------|
+| N40       | SMF          | Nchf_ConvergedCharging   | PDU session charging|
+| N28       | PCF          | Nchf_SpendingLimitControl| Spending limits     |
+| Nnrf      | NRF          | Nnrf_NFManagement        | NF registration     |
+
+
+================================================================================
+                              END OF DOCUMENT
+================================================================================

@@ -1,0 +1,302 @@
+================================================================================
+                    SPECIFICATION MAP: nssf.py
+           Network Slice Selection Function - Spec Reference Bridge
+================================================================================
+
+Source File: 5G_Emulator_API/core_network/nssf.py
+Generated:   2026-01-10
+Lines:       874
+Purpose:     Map each code section to governing 3GPP specifications
+Based On:    Free5GC NSSF implementation
+
+================================================================================
+PRIMARY GOVERNING SPECIFICATIONS
+================================================================================
+
+3GPP TS 29.531 - Network Slice Selection Function Services
+  Location: 90_Work-Telco/3GPP/Rel-19/29_series/
+  Scope: Nnssf_NSSelection and Nnssf_NSSAIAvailability services
+  Key Sections:
+    - Section 5.2: Nnssf_NSSelection service
+    - Section 5.3: Nnssf_NSSAIAvailability service
+    - Section 6.1: API definitions
+
+3GPP TS 23.501 - System Architecture for 5G System
+  Location: 90_Work-Telco/3GPP/Rel-19/23_series/
+  Scope: Network slicing concepts
+  Key Sections:
+    - Section 5.15: Network Slicing
+
+3GPP TS 29.571 - Common Data Types
+  Location: 90_Work-Telco/3GPP/Rel-19/29_series/
+  Scope: S-NSSAI, PLMN, TAI data types
+
+
+================================================================================
+LINE-BY-LINE SPECIFICATION MAPPING
+================================================================================
+
+
+LINES 1-30: MODULE HEADER AND IMPORTS
+--------------------------------------------------------------------------------
+
+Lines 1-4: Module Documentation
+  Reference: Free5GC NSSF
+  3GPP Specs: TS 29.531
+
+Lines 6-20: Imports
+  - FastAPI: HTTP API framework
+  - OpenTelemetry: Distributed tracing
+
+
+LINES 31-154: DATA MODELS
+--------------------------------------------------------------------------------
+
+Lines 33-36: class AccessType(Enum)
+  Spec: TS 29.571 - AccessType enumeration
+  Values: 3GPP_ACCESS, NON_3GPP_ACCESS
+
+Lines 37-41: class RoamingIndication(Enum)
+  Spec: TS 29.531 Section 6.1.6.3.2 - RoamingIndication
+  Values: NON_ROAMING, LOCAL_BREAKOUT, HOME_ROUTED_ROAMING
+
+Lines 42-54: class NfType(Enum)
+  Spec: TS 29.510 - NF types
+
+Lines 55-74: class PlmnId, Snssai, Tai
+  Spec: TS 29.571 - Common Data Types
+
+  S-NSSAI structure per TS 23.501:
+    - sst: Slice/Service Type (0-255)
+    - sd: Slice Differentiator (optional, 6 hex chars)
+
+Lines 75-78: class SubscribedSnssai
+  Spec: TS 29.531 Section 6.1.6.2.2 - SubscribedSnssai
+
+Lines 79-82: class MappingOfSnssai
+  Spec: TS 29.531 Section 6.1.6.2.3 - MappingOfSnssai
+  Purpose: S-NSSAI mapping between HPLMN and VPLMN
+
+Lines 83-88: class NsiInformation
+  Spec: TS 29.531 Section 6.1.6.2.4 - NsiInformation
+  Contains: NRF ID, NSI ID for Network Slice Instance
+
+Lines 89-93: class AllowedSnssai
+  Spec: TS 29.531 Section 6.1.6.2.5 - AllowedSnssai
+
+Lines 94-97: class AllowedNssai
+  Spec: TS 29.531 Section 6.1.6.2.6 - AllowedNssai
+  Contains list of Allowed S-NSSAIs per access type
+
+Lines 98-101: class ConfiguredSnssai
+  Spec: TS 29.531 Section 6.1.6.2.7 - ConfiguredSnssai
+
+Lines 102-124: Slice Info Classes
+  Spec: TS 29.531 Section 6.1.6.2.8-10
+
+  SliceInfoForRegistration:
+    - Used during UE registration
+    - Contains subscribed/requested NSSAI
+
+  SliceInfoForPduSession:
+    - Used for PDU session establishment
+    - Contains S-NSSAI and roaming indication
+
+  SliceInfoForUeConfigurationUpdate:
+    - Used for UE configuration updates
+
+Lines 126-129: class TargetAmfInfo
+  Spec: TS 29.531 Section 6.1.6.2.11 - TargetAmfInfo
+
+Lines 130-144: class AuthorizedNetworkSliceInfo
+  Spec: TS 29.531 Section 6.1.6.2.1 - AuthorizedNetworkSliceInfo
+
+  Response structure containing:
+    - allowedNssaiList: Allowed S-NSSAIs
+    - configuredNssai: Configured S-NSSAIs
+    - targetAmfSet: Target AMF Set for redirection
+    - rejectedNssaiInPlmn/Ta: Rejected S-NSSAIs
+
+Lines 145-154: NSSAI Availability Models
+  Spec: TS 29.531 Section 5.3 - Nnssf_NSSAIAvailability
+
+
+LINES 156-327: NSSF CONFIGURATION
+--------------------------------------------------------------------------------
+
+Lines 156-267: class NSSFConfiguration
+  Purpose: Network slice configuration database
+
+  Configured data per TS 23.501:
+    - supported_plmn_list: Supported PLMNs
+    - supported_snssai_in_plmn: S-NSSAIs per PLMN
+    - supported_tai_list: Supported TAIs
+    - snssai_in_ta: S-NSSAI availability per TA
+    - nsi_information: NSI info per S-NSSAI
+    - snssai_mapping: HPLMN to VPLMN mappings
+
+  Default slices (lines 166-182):
+    - SST 1 (eMBB) with various SDs
+    - SST 2 (URLLC)
+    - SST 3 (MIoT)
+
+Lines 268-327: Configuration Helper Methods
+  - check_supported_plmn(): Validate PLMN
+  - check_supported_ta(): Validate TAI
+  - check_snssai_in_plmn(): Check S-NSSAI in PLMN
+  - check_snssai_in_ta(): Check S-NSSAI in TA
+  - get_nsi_information(): Get NSI for S-NSSAI
+  - get_snssai_mapping(): Get S-NSSAI mapping for roaming
+
+
+LINES 337-577: NSSF CLASS
+--------------------------------------------------------------------------------
+
+Lines 337-342: class NSSF.__init__
+  Spec: TS 29.531 - NSSF info
+
+Lines 343-459: ns_selection_for_registration()
+  Spec: TS 29.531 Section 5.2.2.2 - NS Selection for Registration
+  Service: Nnssf_NSSelection
+  Operation: NSSelectionGet
+
+  Procedure per TS 29.531:
+    1. Validate NF consumer (AMF only)
+    2. Check home PLMN support for roamers
+    3. Check TAI support
+    4. Handle S-NSSAI mapping for roaming
+    5. Process requested NSSAI against subscribed
+    6. Build allowed/rejected NSSAI lists
+    7. Set configured NSSAI if needed
+
+Lines 460-508: _handle_mapping_request()
+  Spec: TS 29.531 - S-NSSAI mapping for roaming
+
+  Maps home S-NSSAIs to serving S-NSSAIs
+
+Lines 510-527: _get_configured_nssai()
+  Purpose: Build configured NSSAI from subscription
+
+Lines 528-577: ns_selection_for_pdu_session()
+  Spec: TS 29.531 Section 5.2.2.3 - NS Selection for PDU Session
+
+  Validates:
+    - Roaming indication consistency
+    - S-NSSAI availability in TA
+    - Returns NSI information
+
+
+LINES 582-639: NRF REGISTRATION
+--------------------------------------------------------------------------------
+
+Lines 582-639: lifespan() - Startup/Shutdown
+  Spec: TS 29.510 - Nnrf_NFManagement service
+
+  NF Profile per TS 29.510:
+    - nfServices: nnssf-nsselection, nnssf-nssaiavailability
+    - nssfInfo: SUPI ranges
+
+
+LINES 660-724: NNSSF_NSSELECTION SERVICE
+--------------------------------------------------------------------------------
+
+Lines 660-724: get_network_slice_information()
+  Spec: TS 29.531 Section 5.2.2.2.1 - NS Selection
+  Service: Nnssf_NSSelection
+  Operation: NSSelectionGet
+  Interface: N22 (AMF-NSSF)
+
+  API: GET /nnssf-nsselection/v1/network-slice-information
+
+  Query Parameters per TS 29.531:
+    - nf-type: NF consumer type
+    - nf-id: NF instance ID
+    - slice-info-request-for-registration: Registration slice info (JSON)
+    - slice-info-request-for-pdu-session: PDU session slice info (JSON)
+    - home-plmn-id: Home PLMN for roaming
+    - tai: Tracking Area Identity
+
+
+LINES 726-816: NNSSF_NSSAIAVAILABILITY SERVICE
+--------------------------------------------------------------------------------
+
+Lines 728-755: nssai_availability_put()
+  Spec: TS 29.531 Section 5.3.2.2 - NSSAI Availability Update
+  API: PUT /nnssf-nssaiavailability/v1/nssai-availability/{nfId}
+
+Lines 757-771: nssai_availability_patch()
+  Spec: TS 29.531 Section 5.3.2.4 - NSSAI Availability Patch
+
+Lines 773-784: nssai_availability_delete()
+  Spec: TS 29.531 Section 5.3.2.3 - NSSAI Availability Delete
+
+Lines 786-816: NSSAI Availability Subscriptions
+  Spec: TS 29.531 Section 5.3.3 - Subscribe/Unsubscribe
+
+  Endpoints:
+    - POST /subscriptions: Subscribe
+    - DELETE /subscriptions/{subscriptionId}: Unsubscribe
+
+
+LINES 818-874: MANAGEMENT AND HEALTH
+--------------------------------------------------------------------------------
+
+Lines 820-843: Configuration endpoints
+  - GET /nssf/configuration: Get NSSF config
+  - GET /nssf/slices: Get available slices
+
+Lines 848-869: Health and metrics
+  Returns:
+    - Supported PLMNs count
+    - Supported TAIs count
+    - Configured slices
+    - Active subscriptions
+
+
+================================================================================
+SPECIFICATION CROSS-REFERENCE TABLE
+================================================================================
+
+| Code Section                  | Primary Spec | Section        |
+|-------------------------------|--------------|----------------|
+| AccessType                    | TS 29.571    | 5.4.3          |
+| RoamingIndication             | TS 29.531    | 6.1.6.3.2      |
+| Snssai                        | TS 29.571    | 5.4.4.2        |
+| AllowedNssai                  | TS 29.531    | 6.1.6.2.6      |
+| AuthorizedNetworkSliceInfo    | TS 29.531    | 6.1.6.2.1      |
+| SliceInfoForRegistration      | TS 29.531    | 6.1.6.2.8      |
+| SliceInfoForPduSession        | TS 29.531    | 6.1.6.2.9      |
+| ns_selection_for_registration | TS 29.531    | 5.2.2.2        |
+| ns_selection_for_pdu_session  | TS 29.531    | 5.2.2.3        |
+| nssai_availability_put        | TS 29.531    | 5.3.2.2        |
+| NRF registration              | TS 29.510    | 5.2.2.2        |
+
+
+================================================================================
+STANDARD S-NSSAI VALUES (TS 23.501)
+================================================================================
+
+| SST | Service Type    | Description                              |
+|-----|-----------------|------------------------------------------|
+| 1   | eMBB            | Enhanced Mobile Broadband                |
+| 2   | URLLC           | Ultra-Reliable Low Latency Communication |
+| 3   | MIoT            | Massive IoT                              |
+| 4   | V2X             | Vehicle-to-Everything (operator-specific)|
+| 5-127| Reserved       | For future standardization               |
+| 128-255| Operator     | Operator-specific values                 |
+
+
+================================================================================
+NSSF INTERFACE MAPPING
+================================================================================
+
+| Interface | Connected NF | Service              | Purpose                  |
+|-----------|--------------|----------------------|--------------------------|
+| N22       | AMF          | Nnssf_NSSelection    | Slice selection          |
+| N22       | AMF          | Nnssf_NSSAIAvailability| NSSAI availability info |
+| Nnrf      | NRF          | Nnrf_NFManagement    | NF registration          |
+
+
+================================================================================
+                              END OF DOCUMENT
+================================================================================

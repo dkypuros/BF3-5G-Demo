@@ -1,0 +1,94 @@
+# Prometheus Configuration for 5G Core Network Emulator
+# Scrapes metrics from all Network Functions
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Infrastructure
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # 5G Core Network Functions
+  - job_name: 'nrf'
+    static_configs:
+      - targets: ['nrf:9000']
+    metrics_path: /metrics
+
+  - job_name: 'amf'
+    static_configs:
+      - targets: ['amf:9001']
+    metrics_path: /metrics
+
+  - job_name: 'smf'
+    static_configs:
+      - targets: ['smf:9002']
+    metrics_path: /metrics
+
+  - job_name: 'upf'
+    static_configs:
+      - targets: ['upf:9003']
+    metrics_path: /metrics
+
+  - job_name: 'ausf'
+    static_configs:
+      - targets: ['ausf:9004']
+    metrics_path: /metrics
+
+  - job_name: 'udm'
+    static_configs:
+      - targets: ['udm:9005']
+    metrics_path: /metrics
+
+  - job_name: 'pcf'
+    static_configs:
+      - targets: ['pcf:9006']
+    metrics_path: /metrics
+
+  - job_name: 'udr'
+    static_configs:
+      - targets: ['udr:9007']
+    metrics_path: /metrics
+
+  - job_name: 'nssf'
+    static_configs:
+      - targets: ['nssf:9010']
+    metrics_path: /metrics
+
+  - job_name: 'bsf'
+    static_configs:
+      - targets: ['bsf:9011']
+    metrics_path: /metrics
+
+  - job_name: 'scp'
+    static_configs:
+      - targets: ['scp:9012']
+    metrics_path: /metrics
+
+  - job_name: 'chf'
+    static_configs:
+      - targets: ['chf:9013']
+    metrics_path: /metrics
+
+  - job_name: 'sepp'
+    static_configs:
+      - targets: ['sepp:9014']
+    metrics_path: /metrics
+
+  - job_name: 'n3iwf'
+    static_configs:
+      - targets: ['n3iwf:9015']
+    metrics_path: /metrics
+
+  - job_name: 'nef'
+    static_configs:
+      - targets: ['nef:9016']
+    metrics_path: /metrics
+
+  # Radio Access Network
+  - job_name: 'gnb'
+    static_configs:
+      - targets: ['gnb:9100']
+    metrics_path: /metrics

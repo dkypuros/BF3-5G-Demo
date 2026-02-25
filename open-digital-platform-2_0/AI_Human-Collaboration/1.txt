@@ -1,0 +1,566 @@
+Read(90_5G_lab_simulator/BF3-5G-Demo/open-digital-platform-2_0/5G_Emulator_API
+      /ran/gnb.py.spec.txt)
+  ⎿  Read 100 lines
+
+⏺ Based on my analysis, there is no RIC (RAN Intelligent Controller) currently in this project. However, there are clear places where it would naturally fit:
+
+  Current RAN Structure
+
+  ran/
+  ├── gnb.py          # Integrated gNodeB (N2 to AMF via NGAP)
+  ├── cu/             # Central Unit (PDCP, RRC, SDAP)
+  ├── du/             # Distributed Unit (RLC, MAC, PHY)
+  └── rru/            # Remote Radio Unit
+
+  Where to Incorporate RIC
+
+  Option 1: New ran/ric/ directory (follows existing pattern)
+  ran/ric/
+  ├── near_rt_ric.py      # Near-RT RIC (O-RAN WG3) - <10ms control loop
+  ├── non_rt_ric.py       # Non-RT RIC (O-RAN WG2) - >1s control loop
+  ├── xapp_sdk.py         # xApp framework for Near-RT RIC
+  ├── rapp_sdk.py         # rApp framework for Non-RT RIC
+  └── a1_mediator.py      # A1 interface (Non-RT -> Near-RT RIC)
+
+  Option 2: Separate oran/ directory at project root
+
+  Key Integration Points
+
+  | Interface      | Connection               | Existing Component                        |
+  |----------------|--------------------------|-------------------------------------------|
+  | E2 (O-RAN WG3) | Near-RT RIC ↔ CU/DU      | ran/cu/, ran/du/                          |
+  | A1 (O-RAN WG2) | Non-RT RIC ↔ Near-RT RIC | (new)                                     |
+  | O1             | RIC ↔ Management         | etsi/nfv/vnfm.py, etsi/zsm/closed_loop.py |
+  | RNIS           | RIC data source          | etsi/mec/rnis_api.py already exists       |
+
+  The ZSM closed-loop engine and RNIS API are natural partners - ZSM could coordinate with Non-RT RIC for intent-based RAN optimization, while RNIS could feed radio measurements into RIC xApps.
+
+> Are there any standards for this ? do they exist? 
+[local path redacted] 
+Have I already downloaded them? 
+
+⏺ Bash(ls -la [local path redacted]
+      lic_Data/)
+  ⎿  total 16                                                
+     drwxr-xr-x  52 davidkypuros  staff  1664 Jan  7 15:30 .
+     drwxr-xr-x  44 davidkypuros  staff  1408 Jan 10 06:31 ..
+     … +65 lines (ctrl+o to expand)
+
+⏺ Search(pattern: "O-RAN|ORAN|RIC|xApp|rApp|E2AP|A1", path:
+        "21_Networking_Public_Data")
+  ⎿  Found 230 files (ctrl+o to expand)
+
+⏺ Bash(ls -la [local path redacted]
+      lic_Data/46_Telecom_Radio/)
+  ⎿  total 0                                                 
+     drwxr-xr-x@  8 davidkypuros  staff   256 Jan  6 08:46 .
+     drwxr-xr-x  52 davidkypuros  staff  1664 Jan  7 15:30 ..
+     … +7 lines (ctrl+o to expand)
+
+⏺ Bash(find
+      [local path redacted]
+       -type d -iname "*oran*" -o -type d -iname "*o-ran*" 2>/dev/null)
+  ⎿  (No content)
+
+⏺ Bash(find [local path redacted] -type d -iname
+      "*oran*" -o -type d -iname "*o-ran*" 2>/dev/null | head -20)
+  ⎿ [local path redacted]
+    _Basic_Market_Repo/SP500/FCX_Freeport-McMoRan
+    [local path redacted]
+    … +45 lines (ctrl+o to expand)
+
+
+
+⏺ You have O-RAN specs! Let me check what you have:
+
+⏺ Bash(ls -la
+      "[local path redacted]
+  ⎿  total 17208                                                
+     drwxr-xr-x@ 30 davidkypuros  staff      960 Jan  5 13:34 .
+     drwxr-xr-x  20 davidkypuros  staff      640 Jan 10 14:17 ..
+     … +56 lines (ctrl+o to expand)
+
+⏺ Bash(find
+      "[local path redacted]
+      -type f \( -name "*.pdf" -o -name "*.zip" -o -name "*.docx" \) 2>/dev/null
+       | head -5…)
+  ⎿  (No content)
+
+⏺ Yes! You have O-RAN specs already downloaded. Let me show you what you have:
+
+⏺ Read(90_Work-Telco/O-RAN/O-RAN_Document_Guide.txt)
+  ⎿  Read 500 lines
+
+⏺ Bash(ls -la "[local path redacted]
+      /source_code/3_future/49_oran-o2ims/" | head -20)
+  ⎿  total 424                                                
+     drwxr-xr-x@ 41 davidkypuros  staff   1312 Jan  8 06:19 .
+     drwxr-xr-x@ 14 davidkypuros  staff    448 Jan 10 05:59 ..
+     … +20 lines (ctrl+o to expand)
+
+⏺ Yes, standards exist and you have them! Here's what you have:
+
+  Your O-RAN Spec Collection (90_Work-Telco/O-RAN/)
+
+  RIC-Specific Specs (What you need for implementing RIC):
+
+  | Spec                                 | WG  | Purpose                                        |
+  |--------------------------------------|-----|------------------------------------------------|
+  | ETSI_TS_103983_A1_Interface_v3.tex   | WG2 | A1 Interface (Non-RT RIC ↔ Near-RT RIC)        |
+  | ETSI_TS_104226_WG2_Use_Cases_v10.tex | WG2 | Non-RT RIC use cases, rApps                    |
+  | ETSI_TS_104038_WG3_E2GAP_v4.tex      | WG3 | E2 General Aspects (Near-RT RIC architecture)  |
+  | ETSI_TS_104039_E2AP_v4.tex           | WG3 | E2 Application Protocol (xApp communication)   |
+  | ETSI_TS_104040_E2SM_v4.tex           | WG3 | E2 Service Model (RAN services exposed to RIC) |
+
+  Supporting Architecture Docs:
+
+  | Spec                                   | Purpose                             |
+  |----------------------------------------|-------------------------------------|
+  | ETSI_TS_103982_WG1_Architecture_v8.tex | Core O-RAN architecture             |
+  | ETSI_TS_104043_O1_Interface_v11.tex    | O1 management interface (SMO ↔ RIC) |
+  | Security specs (WG11)                  | RIC security requirements           |
+
+  You Also Have Source Code!
+
+  16_pure_os_stack/source_code/3_future/49_oran-o2ims/ - This is the O-RAN O2 IMS (O-Cloud management) reference implementation!
+
+  What This Means for Your 5G Emulator
+
+  You have the specs to implement:
+  - Near-RT RIC with E2 interface to your CU/DU
+  - Non-RT RIC with A1 interface
+  - xApp/rApp frameworks based on the service models
+  - Integration with your existing ZSM closed-loop
+
+  The architecture would connect like:
+  Your SMO/ZSM (etsi/zsm/)
+      ↓ O1
+  Your Non-RT RIC (ran/ric/non_rt_ric.py) ← NEW
+      ↓ A1
+  Your Near-RT RIC (ran/ric/near_rt_ric.py) ← NEW
+      ↓ E2
+  Your CU/DU (ran/cu/, ran/du/)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 3 Explore agents finished (ctrl+o to expand)
+   ├─ Explore CU/DU RAN components · 17 tool uses · 52.7k tokens
+   │  ⎿  Done
+   ├─ Explore ETSI ZSM/VNFM/RNIS · 13 tool uses · 65.5k tokens
+   │  ⎿  Done
+   └─ Explore O-RAN specs for RIC · 32 tool uses · 68.3k tokens
+      ⎿  Done
+
+⏺ Excellent! I have comprehensive information from all three exploration agents. Let me now design the implementation plan.
+
+⏺ Updated plan
+  ⎿  /plan to preview
+
+⏺ Let me check the existing docs directory structure:
+
+⏺ Bash(ls -la [local path redacted]
+  ⎿  total 320                                                
+     drwxr-xr-x   9 davidkypuros  staff    288 Jan  6 10:40 .
+     drwxr-xr-x  14 davidkypuros  staff    448 Jan 10 06:11 ..
+     … +7 lines (ctrl+o to expand)
+
+⏺ Updated plan
+  ⎿  /plan to preview
+
+⏺ I've completed the implementation plan. Here's a summary:
+
+  RIC Implementation Plan Summary
+
+  New Components (7 files in ran/ric/)
+
+  1. near_rt_ric.py (Port 8095) - Near-RT RIC with E2 interface
+  2. non_rt_ric.py (Port 8096) - Non-RT RIC with A1 interface
+  3. e2ap.py - E2 Application Protocol messages
+  4. a1_interface.py - A1 interface client/server
+  5. xapp_sdk.py - xApp development framework
+  6. rapp_sdk.py - rApp development framework
+  7. init.py - Package init
+
+  Integration Points
+
+  | Interface | From → To                | Existing Component                        |
+  |-----------|--------------------------|-------------------------------------------|
+  | E2        | Near-RT RIC → CU/DU      | ran/cu.py, ran/du.py                      |
+  | A1        | Non-RT RIC → Near-RT RIC | (new)                                     |
+  | O1        | Non-RT RIC → Management  | etsi/zsm/closed_loop.py, etsi/nfv/vnfm.py |
+  | RNIS      | Near-RT RIC ← Radio data | etsi/mec/rnis_api.py                      |
+
+  Spec Compliance
+
+  - Near-RT RIC: ETSI TS 104038/104039/104040 (E2GAP, E2AP, E2SM)
+  - Non-RT RIC: ETSI TS 103983 (A1 Interface)
+  - Uses your existing O-RAN specs from 90_Work-Telco/O-RAN/
+
+  Documentation
+
+  Will update: docs/ric-architecture.md (new), docs/ran-components.md, docs/api-reference.md, docs/architecture.md
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ Ready to code?
+
+ Here is Claude's plan:
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ RIC Implementation Plan for 5G Emulator
+
+ Overview
+
+ Implement O-RAN RAN Intelligent Controller (RIC) components for the 5G Emulator API, consisting of:
+ - Near-RT RIC: Near-real-time control (10ms-1s) via E2 interface to CU/DU
+ - Non-RT RIC: Non-real-time control (>1s) via A1 interface to Near-RT RIC
+ - xApp/rApp Frameworks: Extensible application hosting
+
+ Architecture
+
+                     +------------------+
+                     |       SMO        |
+                     | (ZSM/VNFM - O1)  |
+                     +--------+---------+
+                              |
+                             O1
+                              |
+                     +--------v---------+
+                     |    Non-RT RIC    | Port 8096
+                     |  (rApps, Policy) |
+                     +--------+---------+
+                              |
+                             A1
+                              |
+                     +--------v---------+
+                     |   Near-RT RIC    | Port 8095
+                     |  (xApps, E2AP)   |
+                     +--------+---------+
+                              |
+                             E2
+                              |
+               +--------------+--------------+
+               |              |              |
+         +-----v----+   +-----v----+   +-----v----+
+         |    CU    |   |    DU    |   |   gNB    |
+         | :38472   |   | :38473   |   | :38412   |
+         +----------+   +----------+   +----------+
+
+ Directory Structure
+
+ ran/ric/
+ ├── __init__.py
+ ├── near_rt_ric.py          # Near-RT RIC main service (E2 interface)
+ ├── non_rt_ric.py           # Non-RT RIC main service (A1 interface)
+ ├── e2ap.py                 # E2 Application Protocol messages/procedures
+ ├── e2sm_kpm.py             # E2SM KPM Service Model (measurements)
+ ├── e2sm_rc.py              # E2SM RC Service Model (control)
+ ├── a1_interface.py         # A1 interface implementation
+ ├── xapp_sdk.py             # xApp development framework
+ ├── rapp_sdk.py             # rApp development framework
+ ├── subscriptions.py        # Subscription management
+ └── near_rt_ric.py.spec.txt # Spec reference mapping
+
+ Implementation Details
+
+ Phase 1: Near-RT RIC Core (near_rt_ric.py)
+
+ Port: 8095
+ Spec: ETSI TS 104038/104039/104040
+
+ Core Components:
+ 1. NearRtRic class with E2 node management
+ 2. E2 Setup procedure handling
+ 3. RIC Subscription management (REPORT, CONTROL, POLICY, QUERY services)
+ 4. xApp registry and lifecycle
+
+ API Endpoints:
+ POST /e2/setup                    # E2 Setup from E2 Node
+ POST /e2/subscription             # Create RIC subscription
+ DELETE /e2/subscription/{id}      # Delete subscription
+ POST /e2/indication               # Receive RIC Indication from E2 Node
+ POST /e2/control                  # Send RIC Control to E2 Node
+ POST /e2/query                    # Query E2 Node
+ GET /ric/xapps                    # List registered xApps
+ POST /ric/xapps                   # Register xApp
+ GET /ric/e2-nodes                 # List connected E2 Nodes
+ GET /ric/subscriptions            # List active subscriptions
+ GET /health                       # Health check
+ GET /metrics                      # Prometheus metrics
+
+ Data Models:
+ - E2Node: E2 node connection state
+ - RicSubscription: Subscription with event trigger and actions
+ - RicIndication: Indication message (REPORT/INSERT)
+ - RicControl: Control message
+ - XApp: xApp registration info
+
+ Phase 2: E2 Protocol Layer (e2ap.py)
+
+ Spec: ETSI TS 104039
+
+ Procedures:
+ 1. E2 Setup Request/Response
+ 2. RIC Subscription Request/Response/Failure
+ 3. RIC Subscription Delete Request/Response
+ 4. RIC Indication
+ 5. RIC Control Request/Response/Failure
+ 6. RIC Query Request/Response
+ 7. Error Indication
+
+ Message Factory Pattern (matching existing codebase style):
+ def create_e2_setup_request(global_e2_node_id, ran_functions)
+ def create_ric_subscription_request(ric_request_id, ran_function_id, event_trigger, action_list)
+ def create_ric_indication(ric_request_id, ran_function_id, indication_type, indication_header, indication_message)
+ def create_ric_control_request(ric_request_id, ran_function_id, control_header, control_message)
+
+ Phase 3: E2 Service Models
+
+ e2sm_kpm.py (Key Performance Measurements)
+
+ Spec: O-RAN.WG3.E2SM-KPM
+
+ Measurements:
+ - Cell-level: DL/UL PRB utilization, active UEs, throughput
+ - UE-level: RSRP, RSRQ, throughput, latency
+ - Bearer-level: QoS metrics
+
+ Integration with RNIS:
+ - Query RNIS at http://127.0.0.1:8092 for radio measurements
+ - Subscribe to L2 measurements from DU
+
+ e2sm_rc.py (RAN Control)
+
+ Spec: O-RAN.WG3.E2SM-RC
+
+ Control Actions:
+ - Handover control
+ - Load balancing
+ - Scheduler parameter adjustment
+ - Power control
+
+ Phase 4: Non-RT RIC (non_rt_ric.py)
+
+ Port: 8096
+ Spec: ETSI TS 103983
+
+ A1 Services:
+ 1. A1-P (Policy): Deploy policies to Near-RT RIC
+ 2. A1-EI (Enrichment Info): Provide enrichment data
+ 3. A1-ML (ML Models): Deploy ML models (future)
+
+ API Endpoints:
+ # A1 Policy Management
+ GET /a1-p/policytypes                    # List policy types
+ GET /a1-p/policytypes/{id}               # Get policy type
+ POST /a1-p/policytypes/{id}/policies     # Create policy instance
+ GET /a1-p/policytypes/{id}/policies      # List policies
+ PUT /a1-p/policytypes/{id}/policies/{pid} # Update policy
+ DELETE /a1-p/policytypes/{id}/policies/{pid} # Delete policy
+ GET /a1-p/policytypes/{id}/policies/{pid}/status # Policy status
+
+ # A1 Enrichment Information
+ POST /a1-ei/eijobs                       # Create EI job
+ GET /a1-ei/eijobs                        # List EI jobs
+ DELETE /a1-ei/eijobs/{id}                # Delete EI job
+
+ # rApp Management
+ GET /ric/rapps                           # List rApps
+ POST /ric/rapps                          # Register rApp
+
+ # O1 Integration (queries to ZSM/VNFM)
+ GET /o1/intents                          # Get ZSM intents
+ POST /o1/intents                         # Create ZSM intent
+ GET /o1/vnf-instances                    # Get VNF states
+
+ GET /health
+ GET /metrics
+
+ Data Models:
+ - PolicyType: Policy type definition with schema
+ - PolicyInstance: Policy instance with scope and parameters
+ - EnrichmentInfo: Enrichment information job
+ - RApp: rApp registration
+
+ Phase 5: A1 Interface (a1_interface.py)
+
+ Spec: ETSI TS 103983
+
+ A1 Client (Non-RT RIC side):
+ class A1Client:
+     async def create_policy(policy_type_id, policy_id, policy_data)
+     async def update_policy(policy_type_id, policy_id, policy_data)
+     async def delete_policy(policy_type_id, policy_id)
+     async def get_policy_status(policy_type_id, policy_id)
+     async def send_enrichment_info(ei_job_id, ei_data)
+
+ A1 Server (Near-RT RIC side):
+ # Endpoints in near_rt_ric.py for receiving A1 messages
+ POST /a1/policies                    # Receive policy from Non-RT RIC
+ DELETE /a1/policies/{id}             # Policy deletion
+ POST /a1/enrichment                  # Receive enrichment info
+
+ Phase 6: xApp/rApp SDKs
+
+ xapp_sdk.py
+
+ class XAppBase:
+     """Base class for xApp development"""
+     def __init__(self, xapp_name, ric_url)
+     async def subscribe(self, e2_node_id, event_trigger, actions)
+     async def send_control(self, e2_node_id, control_header, control_message)
+     async def receive_indication(self, indication)  # Override in subclass
+     def register_callback(self, indication_type, callback)
+
+ Example xApps:
+ - LoadBalancingXApp: Monitor cell load, trigger handovers
+ - QoSOptimizationXApp: Adjust scheduler based on QoS requirements
+
+ rapp_sdk.py
+
+ class RAppBase:
+     """Base class for rApp development"""
+     def __init__(self, rapp_name, ric_url)
+     async def create_policy(self, policy_type_id, policy_data)
+     async def send_enrichment(self, ei_type, ei_data)
+     async def query_analytics(self)  # Get RAN analytics
+
+ Phase 7: Integration with Existing Components
+
+ CU/DU E2 Agent Extensions
+
+ Add to ran/cu.py:
+ # E2 Node registration with Near-RT RIC
+ async def register_with_ric():
+     await httpx.post(f"{ric_url}/e2/setup", json=e2_setup_request)
+
+ # E2 Indication sender
+ async def send_e2_indication(indication):
+     await httpx.post(f"{ric_url}/e2/indication", json=indication)
+
+ # E2 Control handler
+ @app.post("/e2/control")
+ async def handle_e2_control(control: RicControlRequest):
+     # Apply control action to RAN
+
+ Add to ran/du.py:
+ # Similar E2 agent functionality
+ # Report MAC/RLC/PDCP metrics via E2
+
+ RNIS Integration
+
+ Near-RT RIC queries RNIS for radio measurements:
+ async def get_radio_measurements(ue_id):
+     response = await httpx.get(f"http://127.0.0.1:8092/rni/v2/ue/{ue_id}/measurements")
+     return response.json()
+
+ ZSM/VNFM Integration (O1)
+
+ Non-RT RIC integrates with existing management:
+ # Query ZSM for intents
+ async def get_zsm_intents():
+     return await httpx.get("http://127.0.0.1:8094/zsm/v1/intents")
+
+ # Create scaling intent based on RAN analytics
+ async def create_scaling_intent(target_nf, objective):
+     return await httpx.post("http://127.0.0.1:8094/zsm/v1/intents", json=intent)
+
+ # Query VNFM for VNF states
+ async def get_vnf_states():
+     return await httpx.get("http://127.0.0.1:8093/vnflcm/v1/vnf_instances")
+
+ File Changes Summary
+
+ New Files (7 files)
+
+ | File                    | Lines (est.) | Purpose             |
+ |-------------------------|--------------|---------------------|
+ | ran/ric/__init__.py     | ~20          | Package init        |
+ | ran/ric/near_rt_ric.py  | ~600         | Near-RT RIC service |
+ | ran/ric/non_rt_ric.py   | ~500         | Non-RT RIC service  |
+ | ran/ric/e2ap.py         | ~400         | E2AP protocol       |
+ | ran/ric/a1_interface.py | ~250         | A1 interface        |
+ | ran/ric/xapp_sdk.py     | ~200         | xApp framework      |
+ | ran/ric/rapp_sdk.py     | ~150         | rApp framework      |
+
+ Modified Files (3 files)
+
+ | File            | Changes                  |
+ |-----------------|--------------------------|
+ | ran/cu.py       | Add E2 agent (~50 lines) |
+ | ran/du.py       | Add E2 agent (~50 lines) |
+ | config/ports.py | Add RIC ports            |
+
+ Documentation Updates
+
+ Base path: [local path redacted]
+
+ | File                     | Purpose                         |
+ |--------------------------|---------------------------------|
+ | docs/ric-architecture.md | RIC architecture overview (new) |
+ | docs/ran-components.md   | Update with RIC section         |
+ | docs/api-reference.md    | Add RIC API endpoints           |
+ | docs/architecture.md     | Add RIC to overall architecture |
+
+ Spec Reference Files
+
+ | File                            | Purpose                      |
+ |---------------------------------|------------------------------|
+ | ran/ric/near_rt_ric.py.spec.txt | Spec mapping for Near-RT RIC |
+ | ran/ric/non_rt_ric.py.spec.txt  | Spec mapping for Non-RT RIC  |
+
+ Implementation Order
+
+ 1. near_rt_ric.py - Core Near-RT RIC with E2 setup and subscription
+ 2. e2ap.py - E2 protocol messages
+ 3. non_rt_ric.py - Non-RT RIC with A1 policy management
+ 4. a1_interface.py - A1 client/server
+ 5. xapp_sdk.py - xApp framework
+ 6. rapp_sdk.py - rApp framework
+ 7. CU/DU modifications - E2 agent integration
+ 8. Documentation - All docs
+
+ Port Assignments
+
+ | Component       | Port  |
+ |-----------------|-------|
+ | Near-RT RIC     | 8095  |
+ | Non-RT RIC      | 8096  |
+ | (existing) CU   | 38472 |
+ | (existing) DU   | 38473 |
+ | (existing) gNB  | 38412 |
+ | (existing) RNIS | 8092  |
+ | (existing) ZSM  | 8094  |
+ | (existing) VNFM | 8093  |
+
+ Spec Compliance
+
+ | Component      | Primary Specs                                              |
+ |----------------|------------------------------------------------------------|
+ | Near-RT RIC    | ETSI TS 104038 (E2GAP), TS 104039 (E2AP), TS 104040 (E2SM) |
+ | Non-RT RIC     | ETSI TS 103983 (A1 Interface), TS 104226 (WG2 Use Cases)   |
+ | O1 Integration | ETSI TS 104043 (O1 Interface)                              |

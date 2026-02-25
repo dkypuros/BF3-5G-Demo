@@ -1,0 +1,282 @@
+================================================================================
+SPECIFICATION MAP: near_rt_ric.py
+Near-RT RIC (Near-Real-Time RAN Intelligent Controller)
+================================================================================
+
+File: 5G_Emulator_API/ran/ric/near_rt_ric.py
+Lines: ~700
+Primary Role: Near-real-time RAN control via E2 interface (10ms-1s latency)
+Interface: E2 (to CU/DU), A1 receiver (from Non-RT RIC)
+
+================================================================================
+PRIMARY GOVERNING SPECIFICATIONS
+================================================================================
+
+1. ETSI TS 104038 - E2 General Aspects and Principles
+   Your file: 90_Work-Telco/O-RAN/ETSI_TS_104038_WG3_E2GAP_v4.tex
+   Coverage: E2 interface architecture, Near-RT RIC functions
+
+2. ETSI TS 104039 - E2 Application Protocol (E2AP)
+   Your file: 90_Work-Telco/O-RAN/ETSI_TS_104039_E2AP_v4.tex
+   Coverage: E2 procedures (Setup, Subscription, Indication, Control, Query)
+
+3. ETSI TS 104040 - E2 Service Model (E2SM)
+   Your file: 90_Work-Telco/O-RAN/ETSI_TS_104040_E2SM_v4.tex
+   Coverage: RAN Function definitions, Service Models (KPM, RC)
+
+4. ETSI TS 103983 - A1 Interface
+   Your file: 90_Work-Telco/O-RAN/ETSI_TS_103983_A1_Interface_v3.tex
+   Coverage: A1 receiver for policies from Non-RT RIC
+
+================================================================================
+LINE-BY-LINE SPECIFICATION MAPPING
+================================================================================
+
+--------------------------------------------------------------------------------
+LINES 1-40: Module Header and Imports
+--------------------------------------------------------------------------------
+Purpose: Near-RT RIC module with E2 interface implementation
+Specifications: ETSI TS 104038 Section 6 - Near-RT RIC Functions
+
+--------------------------------------------------------------------------------
+LINES 42-70: E2NodeType Enum
+--------------------------------------------------------------------------------
+Specification: ETSI TS 104039 Section 9.2 - E2 Node Types
+
+  Supported Node Types:
+  - gNB: Integrated gNodeB
+  - gNB-CU: gNodeB Central Unit
+  - gNB-DU: gNodeB Distributed Unit
+  - gNB-CU-CP: gNodeB Central Unit Control Plane
+  - gNB-CU-UP: gNodeB Central Unit User Plane
+  - en-gNB: EN-DC gNodeB
+  - ng-eNB: NG-RAN eNodeB
+
+Compliance: EXACT MATCH with ETSI TS 104039 E2 Node Types
+
+--------------------------------------------------------------------------------
+LINES 72-82: RicServiceType Enum
+--------------------------------------------------------------------------------
+Specification: ETSI TS 104038 Section 7 - RIC Services
+
+  RIC Services:
+  - REPORT: E2 Node sends measurement reports to RIC
+  - INSERT: E2 Node sends decision point to RIC
+  - CONTROL: RIC sends control commands to E2 Node
+  - POLICY: RIC configures autonomous policies in E2 Node
+  - QUERY: RIC queries E2 Node for specific information
+
+Compliance: EXACT MATCH with ETSI TS 104038 RIC Service definitions
+
+--------------------------------------------------------------------------------
+LINES 120-180: E2 Node Data Models
+--------------------------------------------------------------------------------
+Specification: ETSI TS 104039 Section 9.2 - E2 Information Elements
+
+  RanFunction (Lines 125-130):
+  - ranFunctionId: 0-4095 per TS 104039 Section 9.2.2
+  - ranFunctionDefinition: E2SM-encoded per TS 104040
+  - ranFunctionRevision: Revision counter
+  - ranFunctionOid: Service Model OID
+
+  E2Node (Lines 150-165):
+  - e2NodeId: Unique identifier
+  - globalE2NodeId: Per ETSI TS 104039 Section 9.2.3
+  - ranFunctions: List of supported functions
+  - connectionState: CONNECTED/DISCONNECTED
+
+Compliance: MATCHES ETSI TS 104039 E2 Node Configuration IE
+
+--------------------------------------------------------------------------------
+LINES 185-230: RIC Subscription Models
+--------------------------------------------------------------------------------
+Specification: ETSI TS 104039 Section 8.2.3 - RIC Subscription
+
+  EventTrigger (Lines 185-195):
+  - triggerType: periodic or event-based
+  - reportingPeriodMs: Reporting period in milliseconds
+
+  RicAction (Lines 197-210):
+  - actionId: 0-255 per spec
+  - actionType: REPORT, INSERT, CONTROL, POLICY
+  - actionDefinition: E2SM-encoded parameters
+
+  RicSubscription (Lines 212-230):
+  - subscriptionId: UUID
+  - ricRequestId: Per TS 104039 Section 9.2.6
+  - ranFunctionId: Target RAN Function
+
+Compliance: MATCHES ETSI TS 104039 RIC Subscription Request IE structure
+
+--------------------------------------------------------------------------------
+LINES 232-260: RIC Indication Model
+--------------------------------------------------------------------------------
+Specification: ETSI TS 104039 Section 8.2.5 - RIC Indication
+
+  RicIndication:
+  - ricRequestId: Reference to subscription
+  - ranFunctionId: Source RAN Function
+  - indicationType: REPORT (0) or INSERT (1)
+  - indicationHeader: E2SM-encoded header
+  - indicationMessage: E2SM-encoded payload
+  - callProcessId: For INSERT service
+
+Compliance: EXACT MATCH with ETSI TS 104039 RIC Indication IE
+
+--------------------------------------------------------------------------------
+LINES 262-290: RIC Control Models
+--------------------------------------------------------------------------------
+Specification: ETSI TS 104039 Section 8.2.6 - RIC Control
+
+  RicControlRequest:
+  - e2NodeId: Target E2 Node
+  - ranFunctionId: Target RAN Function
+  - controlHeader: E2SM-encoded header
+  - controlMessage: E2SM-encoded message
+  - controlAckRequest: Whether to request ACK
+
+  RicControlResponse:
+  - controlOutcome: Result of control action
+  - success: Boolean success indicator
+
+Compliance: MATCHES ETSI TS 104039 RIC Control Request/Acknowledge IE
+
+--------------------------------------------------------------------------------
+LINES 340-420: E2 Setup Procedure
+--------------------------------------------------------------------------------
+Specification: ETSI TS 104039 Section 8.2.1 - E2 Setup
+
+  handle_e2_setup() method:
+  - Receives E2NodeConfig from E2 Node
+  - Validates RAN Functions
+  - Registers E2 Node in registry
+  - Returns accepted/rejected functions
+
+  Per TS 104039 Section 8.2.1.2:
+  - E2 Node initiates E2 Setup Request
+  - Near-RT RIC responds with E2 Setup Response
+  - Contains RAN Functions Accepted/Rejected lists
+
+Compliance: IMPLEMENTS ETSI TS 104039 E2 Setup procedure
+
+--------------------------------------------------------------------------------
+LINES 425-510: RIC Subscription Procedures
+--------------------------------------------------------------------------------
+Specification: ETSI TS 104039 Section 8.2.3 - RIC Subscription
+
+  create_subscription() method:
+  - Validates E2 Node exists
+  - Validates RAN Function is supported
+  - Generates RIC Request ID
+  - Sends subscription to E2 Node
+  - Tracks subscription state
+
+  Per TS 104039 Section 8.2.3.2:
+  - Near-RT RIC initiates RIC Subscription Request
+  - E2 Node responds with accepted/rejected actions
+
+Compliance: IMPLEMENTS ETSI TS 104039 RIC Subscription procedure
+
+--------------------------------------------------------------------------------
+LINES 515-560: RIC Indication Handling
+--------------------------------------------------------------------------------
+Specification: ETSI TS 104039 Section 8.2.5 - RIC Indication
+
+  handle_indication() method:
+  - Receives indication from E2 Node
+  - Matches to subscription via RIC Request ID
+  - Routes to registered xApp
+
+  Per TS 104039 Section 8.2.5:
+  - E2 Node initiates RIC Indication
+  - Contains REPORT or INSERT data
+  - References active subscription
+
+Compliance: IMPLEMENTS ETSI TS 104039 RIC Indication handling
+
+--------------------------------------------------------------------------------
+LINES 565-620: RIC Control Procedures
+--------------------------------------------------------------------------------
+Specification: ETSI TS 104039 Section 8.2.6 - RIC Control
+
+  send_control() method:
+  - Sends control request to E2 Node
+  - Waits for acknowledgment (optional)
+  - Returns control outcome
+
+  Per TS 104039 Section 8.2.6:
+  - Near-RT RIC initiates RIC Control Request
+  - E2 Node responds with Acknowledge or Failure
+  - Timer TRICcontrol for response
+
+Compliance: IMPLEMENTS ETSI TS 104039 RIC Control procedure
+
+--------------------------------------------------------------------------------
+LINES 700-750: A1 Interface Receiver
+--------------------------------------------------------------------------------
+Specification: ETSI TS 103983 - A1 Interface
+
+  receive_a1_policy() method:
+  - Receives policy from Non-RT RIC
+  - Stores for enforcement
+  - Applies to xApp decisions
+
+  Per TS 103983 Section 7:
+  - A1-P service for policy management
+  - Policy type and instance handling
+
+Compliance: IMPLEMENTS ETSI TS 103983 A1 Policy receiver
+
+================================================================================
+TIMING REQUIREMENTS
+================================================================================
+
+Per ETSI TS 104038:
+- Near-RT control loop: 10ms to 1 second
+- E2AP response timeout: Configurable (default 1s)
+- Indication delivery: Near-real-time (<100ms typical)
+
+Implementation:
+- HTTP timeouts set to 1.0s for control operations
+- Async processing for all E2 procedures
+- Background tasks for periodic reporting
+
+================================================================================
+E2 SERVICE MODEL SUPPORT
+================================================================================
+
+The Near-RT RIC supports these E2 Service Models:
+
+1. E2SM-KPM (Key Performance Measurement)
+   OID: 1.3.6.1.4.1.53148.1.2.2.2
+   Actions: REPORT
+   Use: Cell/UE/Bearer level measurements
+
+2. E2SM-RC (RAN Control)
+   OID: 1.3.6.1.4.1.53148.1.2.2.3
+   Actions: REPORT, INSERT, CONTROL, POLICY
+   Use: RAN configuration and control
+
+================================================================================
+xAPP INTEGRATION
+================================================================================
+
+Near-RT RIC provides xApp hosting:
+- xApp registration via /ric/xapps endpoint
+- Subscription routing to xApp callbacks
+- Control message forwarding
+- Lifecycle management
+
+Per O-RAN WG3 xApp framework guidelines.
+
+================================================================================
+PORT CONFIGURATION
+================================================================================
+
+Near-RT RIC: 8095
+E2 Nodes: 38472 (CU), 38473 (DU), 38412 (gNB)
+Non-RT RIC: 8096
+
+================================================================================
+                              END OF SPECIFICATION MAP
+================================================================================
